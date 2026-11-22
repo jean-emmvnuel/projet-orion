@@ -1,21 +1,105 @@
 import os
+import time
+import shutil
 import hashlib
+import datetime
+import tempfile
+import subprocess
 from pathlib import Path
 from collections import OrderedDict
 from dotenv import load_dotenv
+
+# Tentative d'import de psutil et PIL, avec fallback natif Linux si absents
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+try:
+    from PIL import ImageGrab
+except ImportError:
+    ImageGrab = None
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
+)
 from telegram.request import HTTPXRequest
 
-# Chargement des variables d'environnement
+# ---------------------------------------------------------------------------
+# Configuration et variables d'environnement
+# ---------------------------------------------------------------------------
 load_dotenv()
-token = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")
+OWNER_ID_RAW = os.getenv("OWNER_ID")
+OWNER_ID = int(OWNER_ID_RAW) if OWNER_ID_RAW and OWNER_ID_RAW.isdigit() else None
 
-# Racine fixe : toujours le dossier utilisateur
+# Racine confinée : toujours le répertoire personnel de l'utilisateur
 RACINE = Path.home().resolve()
 
+# Dossier de réception des fichiers envoyés via Telegram
+if (RACINE / "Téléchargements").exists():
+    INBOX = RACINE / "Téléchargements" / "ORION"
+elif (RACINE / "Downloads").exists():
+    INBOX = RACINE / "Downloads" / "ORION"
+else:
+    INBOX = RACINE / "reçus"
 
-# Cache des chemins pour respecter la limite stricte de 64 octets de Telegram pour callback_data
+try:
+    INBOX.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
+
+# Limite stricte de fichier Telegram pour un bot public : 50 Mo
+MAX_FILE_SIZE = 50 * 1024 * 1024
+
+# Dossiers ignorés lors de la recherche récursive
+IGNORED_DIRS = {
+    ".git",
+    ".venv",
+    ".env",
+    "__pycache__",
+    "node_modules",
+    ".cache",
+    ".flet",
+    "build",
+    ".local",
+}
+
+
+# ---------------------------------------------------------------------------
+# Sécurité : Contrôle d'accès et validation des chemins
+# ---------------------------------------------------------------------------
+def is_authorized(user_id: int) -> bool:
+    """Si OWNER_ID est configuré dans le .env, seul le propriétaire est autorisé."""
+    if OWNER_ID is None:
+        return True
+    return user_id == OWNER_ID
+
+
+def safe_path(raw_path: str) -> Path:
+    """
+    Résout un chemin absolu ou relatif tout en vérifiant strictement
+    qu'il reste confiné sous RACINE (prévention des traversées ../).
+    """
+    clean_str = raw_path.strip().replace("~", str(RACINE))
+    path = Path(clean_str)
+    if not path.is_absolute():
+        path = RACINE / path
+    resolved = path.resolve()
+    if not resolved.is_relative_to(RACINE):
+        raise PermissionError("Accès refusé en dehors de votre dossier personnel.")
+    return resolved
+
+
+# ---------------------------------------------------------------------------
+# Cache LRU des chemins pour respecter les 64 octets de callback_data Telegram
+# ---------------------------------------------------------------------------
 class PathCache:
     def __init__(self, maxsize=2000):
         self.maxsize = maxsize
@@ -37,96 +121,65 @@ class PathCache:
 path_cache = PathCache()
 
 
-# Commande /start
+# ---------------------------------------------------------------------------
+# Commandes : Accueil & Aide
+# ---------------------------------------------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_user.id):
+        return
+
     texte = (
-        "👋 Bonjour ! Je suis **Orion**, votre assistant Telegram pour gérer vos fichiers à distance.\n\n"
-        "Tapez /help ou /menu pour afficher toutes les commandes, ou /ls pour explorer vos fichiers."
+        "👋 **Bonjour ! Je suis ORION (V0.5 Messager)**\n\n"
+        "Votre assistant personnel pour explorer, piloter et transférer vos fichiers à distance.\n\n"
+        "Tapez /help pour consulter toutes les commandes disponibles ou /ls pour explorer vos fichiers."
     )
     await update.message.reply_text(texte, parse_mode="Markdown")
 
 
-# Commande /help et /menu
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_user.id):
+        return
+
     texte = (
-        "📋 *Menu des commandes disponibles :*\n\n"
-        "🔹 /start - Démarrer le bot et afficher l'accueil\n"
-        "🔹 /help ou /menu - Afficher ce menu des commandes\n"
-        "🔹 /ls `[dossier]` - Explorer les dossiers et fichiers de votre PC (boutons interactifs)\n"
-        "🔹 /getfile `<chemin>` - Télécharger directement un fichier depuis votre PC\n\n"
-        "📎 *Envoi de fichiers / photos :*\n"
-        "Envoyez simplement n'importe quel document ou photo dans cette discussion, Orion le sauvegardera automatiquement sur votre PC dans `~/reçus`."
+        "📋 **Commandes ORION V0.5 disponibles :**\n\n"
+        "🔹 `/ls [dossier]` — Explorer les dossiers avec des boutons interactifs\n"
+        "🔹 `/find <motif>` — Rechercher rapidement un fichier par son nom\n"
+        "🔹 `/get <chemin>` — Télécharger un fichier spécifique (< 50 Mo)\n"
+        "🔹 `/status` — État du PC (CPU, RAM, Disque, Durée de démarrage)\n"
+        "🔹 `/screenshot` — Capture d'écran distante (avec confirmation préalable)\n\n"
+        f"📎 **Envoi de fichiers :**\n"
+        f"Tout document ou photo envoyé dans cette discussion est automatiquement enregistré dans `{INBOX}`."
     )
     await update.message.reply_text(texte, parse_mode="Markdown")
 
 
-# Commande /getfile
-async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not context.args:
-        await update.message.reply_text("Veuillez fournir un nom ou chemin de fichier après la commande /getfile.")
-        return
-
-    arg = " ".join(context.args).lstrip("/")
-    chemin_fichier = (RACINE / arg).expanduser().resolve()
-
-    # Sécurité : interdiction de sortir du dossier utilisateur
-    if not chemin_fichier.is_relative_to(RACINE):
-        await update.message.reply_text("⛔ Accès refusé : Impossible d'accéder en dehors du dossier utilisateur.")
-        return
-
-    if not chemin_fichier.is_file():
-        await update.message.reply_text(f"Le fichier spécifié n'existe pas : {chemin_fichier}")
-        return
-
-    try:
-        with open(chemin_fichier, "rb") as fichier:
-            await update.message.reply_document(document=fichier, filename=chemin_fichier.name)
-    except Exception as e:
-        await update.message.reply_text(f"Une erreur s'est produite lors de l'envoi du fichier : {e}")
-
-
-# Sauvegarder les fichiers reçus
-async def receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message.document:
-        fichier = await update.message.document.get_file()
-        nom_fichier = update.message.document.file_name or "fichier_recu"
-    elif update.message.photo:
-        fichier = await update.message.photo[-1].get_file()
-        nom_fichier = "photo_recue.jpg"
-    else:
-        await update.message.reply_text("Veuillez envoyer un fichier ou une photo.")
-        return
-
-    # Sauvegarde dans ~/reçus
-    chemin_sauvegarde = RACINE / "reçus"
-    chemin_sauvegarde.mkdir(parents=True, exist_ok=True)
-    chemin_fichier = chemin_sauvegarde / nom_fichier
-
-    await fichier.download_to_drive(custom_path=str(chemin_fichier))
-    await update.message.reply_text(f"Fichier reçu et sauvegardé sous : {chemin_fichier}")
-
-
-# Fonction de tri : dossiers normaux d'abord, puis dossiers cachés (.), puis fichiers normaux, puis fichiers cachés (.)
+# ---------------------------------------------------------------------------
+# Commande /ls : Explorateur de fichiers interactif
+# ---------------------------------------------------------------------------
 def tri_fichiers(p: Path):
     is_dir = p.is_dir()
     is_hidden = p.name.startswith(".")
     return (0 if is_dir else 1, 1 if is_hidden else 0, p.name.lower())
 
 
-# Afficher le contenu d'un répertoire
-async def show_directory(update: Update, dossier: Path) -> None:
-    # On garantit que le dossier reste dans la racine utilisateur
-    if not dossier.is_relative_to(RACINE):
+async def show_directory(update_or_query, dossier: Path) -> None:
+    try:
+        dossier = safe_path(str(dossier))
+    except PermissionError:
         dossier = RACINE
 
-    MAX_ITEMS = 30
     try:
         items = sorted(dossier.iterdir(), key=tri_fichiers)
     except PermissionError:
-        await update.message.reply_text(f"Erreur : Permission refusée pour accéder au répertoire {dossier}.")
+        msg = f"⛔ Permission refusée pour le dossier : `{dossier.name}`"
+        if hasattr(update_or_query, "message"):
+            await update_or_query.message.reply_text(msg, parse_mode="Markdown")
+        else:
+            await update_or_query.edit_message_text(msg, parse_mode="Markdown")
         return
 
     clavier = []
+    MAX_ITEMS = 30
     for item in items[:MAX_ITEMS]:
         pid = path_cache.get_id(item)
         if item.is_dir():
@@ -134,108 +187,387 @@ async def show_directory(update: Update, dossier: Path) -> None:
         else:
             clavier.append([InlineKeyboardButton(f"📄 {item.name}", callback_data=f"get:{pid}")])
 
-    # Le bouton retour n'apparaît que si on est dans un sous-dossier de RACINE
-    if dossier != RACINE and dossier.is_relative_to(RACINE):
+    # Bouton retour vers dossier parent si pas à la racine
+    if dossier != RACINE:
         parent_pid = path_cache.get_id(dossier.parent)
-        clavier.append([InlineKeyboardButton("🔙 ..", callback_data=f"nav:{parent_pid}")])
+        clavier.append([InlineKeyboardButton("⬅️ Dossier parent", callback_data=f"nav:{parent_pid}")])
 
-    reply_markup = InlineKeyboardMarkup(clavier)
-    await update.message.reply_text(f"📂 Dossier : {dossier}", reply_markup=reply_markup)
+    markup = InlineKeyboardMarkup(clavier)
+    texte = f"📂 **Dossier :** `{dossier}`\n_Cliquez sur un sous-dossier ou un fichier à télécharger :_"
+
+    if hasattr(update_or_query, "edit_message_text"):
+        await update_or_query.edit_message_text(texte, reply_markup=markup, parse_mode="Markdown")
+    else:
+        await update_or_query.message.reply_text(texte, reply_markup=markup, parse_mode="Markdown")
 
 
-# Commande /ls
 async def ls(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_user.id):
+        return
+
     if context.args:
-        arg = " ".join(context.args).lstrip("/")
-        chemin = (RACINE / arg).expanduser().resolve()
+        raw_arg = " ".join(context.args)
+        try:
+            chemin = safe_path(raw_arg)
+        except Exception as e:
+            await update.message.reply_text(f"⛔ {e}")
+            return
     else:
         chemin = RACINE
 
-    # Sécurité : interdiction de remonter au-dessus de la racine utilisateur
-    if not chemin.is_relative_to(RACINE):
-        await update.message.reply_text("⛔ Accès refusé : Impossible de naviguer au-dessus du dossier utilisateur.")
-        return
-
     if not chemin.is_dir():
-        await update.message.reply_text(f"Le chemin spécifié n'est pas un répertoire valide : {chemin}")
+        await update.message.reply_text(f"❌ Ce chemin n'est pas un dossier : `{chemin}`", parse_mode="Markdown")
         return
 
     await show_directory(update, chemin)
 
 
-# Gestion des clics sur les boutons
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-
-    data = query.data
-    action, _, pid = data.partition(":")
-    path = path_cache.get_path(pid)
-
-    if not path:
-        await query.edit_message_text("⚠️ Session expirée. Veuillez relancer la commande /ls.")
+# ---------------------------------------------------------------------------
+# Commande /find : Recherche rapide par nom
+# ---------------------------------------------------------------------------
+async def find_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_user.id):
         return
 
-    # Sécurité : empêcher tout accès hors de RACINE
-    if not path.is_relative_to(RACINE):
+    if not context.args:
+        await update.message.reply_text("💡 Usage : `/find <motif>` (ex: `/find facture` ou `/find .pdf`)", parse_mode="Markdown")
+        return
+
+    query = " ".join(context.args).strip().lower()
+    msg_search = await update.message.reply_text(f"🔍 Recherche de `{query}` en cours...", parse_mode="Markdown")
+
+    resultats = []
+    MAX_RESULTS = 15
+
+    # Parcours récursif limité et sécurisé
+    for root, dirs, files in os.walk(RACINE):
+        # Exclure les dossiers lourds ou cachés
+        dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith(".")]
+
+        for f in files:
+            if query in f.lower():
+                full_path = Path(root) / f
+                resultats.append(full_path)
+                if len(resultats) >= MAX_RESULTS:
+                    break
+        if len(resultats) >= MAX_RESULTS:
+            break
+
+    if not resultats:
+        await msg_search.edit_text(f"❌ Aucun fichier trouvé correspondant à `{query}`.", parse_mode="Markdown")
+        return
+
+    clavier = []
+    for f in resultats:
+        pid = path_cache.get_id(f)
+        # Afficher le nom et le dossier parent pour le contexte
+        rel_parent = f.parent.name
+        label = f"📄 {f.name} ({rel_parent})"
+        clavier.append([InlineKeyboardButton(label[:60], callback_data=f"get:{pid}")])
+
+    await msg_search.edit_text(
+        f"🎯 **{len(resultats)} résultat(s) pour `{query}` :**\n_Cliquez pour télécharger directement :_",
+        reply_markup=InlineKeyboardMarkup(clavier),
+        parse_mode="Markdown",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Commande /get : Téléchargement direct d'un fichier (< 50 Mo)
+# ---------------------------------------------------------------------------
+async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_user.id):
+        return
+
+    if not context.args:
+        await update.message.reply_text("💡 Usage : `/get <chemin_ou_nom>` (ex: `/get Documents/cv.pdf`)", parse_mode="Markdown")
+        return
+
+    raw_path = " ".join(context.args)
+    try:
+        fichier = safe_path(raw_path)
+    except Exception as e:
+        await update.message.reply_text(f"⛔ {e}")
+        return
+
+    if not fichier.is_file():
+        await update.message.reply_text(f"❌ Fichier introuvable : `{fichier}`", parse_mode="Markdown")
+        return
+
+    taille = fichier.stat().st_size
+    if taille > MAX_FILE_SIZE:
+        mo = taille / (1024 * 1024)
+        await update.message.reply_text(
+            f"⚠️ Fichier trop volumineux pour Telegram (> 50 Mo).\nTaille : `{mo:.1f} Mo`.",
+            parse_mode="Markdown",
+        )
+        return
+
+    msg_status = await update.message.reply_text(f"⏳ Envoi de `{fichier.name}` en cours...", parse_mode="Markdown")
+    try:
+        with open(fichier, "rb") as f:
+            await update.message.reply_document(document=f, filename=fichier.name)
+        await msg_status.delete()
+    except Exception as e:
+        await msg_status.edit_text(f"❌ Erreur lors de l'envoi : {e}")
+
+
+# ---------------------------------------------------------------------------
+# Commande /status : Télémétrie et état du PC
+# ---------------------------------------------------------------------------
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_user.id):
+        return
+
+    # Uptime
+    try:
+        with open("/proc/uptime", "r") as f:
+            uptime_sec = int(float(f.readline().split()[0]))
+            uptime_str = str(datetime.timedelta(seconds=uptime_sec))
+    except Exception:
+        uptime_str = "Indisponible"
+
+    # CPU
+    if psutil:
+        cpu_str = f"`{psutil.cpu_percent(interval=0.2)}%`"
+    else:
+        try:
+            with open("/proc/loadavg", "r") as f:
+                l1, l5, _ = f.read().split()[:2]
+                cpu_str = f"Charge `{l1}` (1m), `{l5}` (5m)"
+        except Exception:
+            cpu_str = "Indisponible"
+
+    # RAM
+    if psutil:
+        ram = psutil.virtual_memory()
+        ram_used = ram.used / (1024**3)
+        ram_total = ram.total / (1024**3)
+        ram_str = f"`{ram_used:.1f} / {ram_total:.1f} Go` (`{ram.percent}%`)"
+    else:
+        try:
+            mem = {}
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    p = line.split(":")
+                    if len(p) == 2:
+                        mem[p[0].strip()] = int(p[1].split()[0])
+            total_kb = mem.get("MemTotal", 1)
+            avail_kb = mem.get("MemAvailable", 0)
+            used_kb = total_kb - avail_kb
+            ram_pct = int(used_kb / total_kb * 100)
+            ram_str = f"`{used_kb / (1024**2):.1f} / {total_kb / (1024**2):.1f} Go` (`{ram_pct}%`)"
+        except Exception:
+            ram_str = "Indisponible"
+
+    # Disque
+    disk = shutil.disk_usage(RACINE)
+    disk_used = (disk.total - disk.free) / (1024**3)
+    disk_total = disk.total / (1024**3)
+    disk_free = disk.free / (1024**3)
+    disk_pct = int((disk.total - disk.free) / disk.total * 100)
+
+    texte = (
+        "📊 **État du système — ORION PC**\n\n"
+        f"⚡ **CPU :** {cpu_str}\n"
+        f"🧠 **RAM :** {ram_str}\n"
+        f"💾 **Disque :** `{disk_used:.1f} / {disk_total:.1f} Go` (`{disk_pct}%` - Libre : `{disk_free:.1f} Go`)\n"
+        f"⏱️ **Actif depuis :** `{uptime_str}`\n"
+        f"📁 **Racine autorisée :** `{RACINE}`\n"
+        f"📥 **Boîte de réception :** `{INBOX}`"
+    )
+    await update.message.reply_text(texte, parse_mode="Markdown")
+
+
+# ---------------------------------------------------------------------------
+# Commande /screenshot : Capture d'écran distante avec confirmation
+# ---------------------------------------------------------------------------
+async def screenshot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_user.id):
+        return
+
+    clavier = [
+        [
+            InlineKeyboardButton("📸 Confirmer la capture", callback_data="screen:snap"),
+            InlineKeyboardButton("❌ Annuler", callback_data="screen:cancel"),
+        ]
+    ]
+    texte = (
+        "📸 **Capture d'écran distante**\n\n"
+        "Confirmez-vous la prise de capture d'écran de l'affichage de votre PC ?"
+    )
+    await update.message.reply_text(texte, reply_markup=InlineKeyboardMarkup(clavier), parse_mode="Markdown")
+
+
+def capture_ecran_locale() -> Path:
+    """Capture l'écran du PC sous Linux (Wayland via grim ou X11 via Pillow)."""
+    fd, tmp_file = tempfile.mkstemp(suffix=".png", prefix="orion_screen_")
+    os.close(fd)
+    tmp_path = Path(tmp_file)
+
+    # 1. Tentative avec grim (standard Wayland sous Linux)
+    try:
+        subprocess.run(["grim", str(tmp_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if tmp_path.exists() and tmp_path.stat().st_size > 0:
+            return tmp_path
+    except Exception:
+        pass
+
+    # 2. Fallback avec Pillow ImageGrab si installé
+    if ImageGrab:
+        try:
+            img = ImageGrab.grab()
+            img.save(tmp_path, "PNG")
+            return tmp_path
+        except Exception:
+            pass
+
+    # 3. Fallback avec gnome-screenshot ou scrot
+    for cmd in [["gnome-screenshot", "-f", str(tmp_path)], ["scrot", str(tmp_path)]]:
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if tmp_path.exists() and tmp_path.stat().st_size > 0:
+                return tmp_path
+        except Exception:
+            continue
+
+    if tmp_path.exists():
+        tmp_path.unlink()
+    raise RuntimeError("Aucun outil de capture d'écran disponible ou session graphique introuvable.")
+
+
+# ---------------------------------------------------------------------------
+# Réception de documents ou photos envoyés par l'utilisateur
+# ---------------------------------------------------------------------------
+async def receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_user.id):
+        return
+
+    if update.message.document:
+        doc = update.message.document
+        nom_fichier = doc.file_name or f"doc_{int(time.time())}"
+        tg_file = await doc.get_file()
+    elif update.message.photo:
+        photo = update.message.photo[-1]
+        nom_fichier = f"photo_{int(time.time())}.jpg"
+        tg_file = await photo.get_file()
+    else:
+        return
+
+    dest = INBOX / nom_fichier
+    # Éviter d'écraser un fichier existant du même nom
+    if dest.exists():
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest = INBOX / f"{dest.stem}_{timestamp}{dest.suffix}"
+
+    msg_dl = await update.message.reply_text(f"⏳ Téléchargement de `{nom_fichier}` vers le PC...", parse_mode="Markdown")
+    await tg_file.download_to_drive(custom_path=str(dest))
+    await msg_dl.edit_text(f"✅ **Fichier enregistré avec succès :**\n`{dest}`", parse_mode="Markdown")
+
+
+# ---------------------------------------------------------------------------
+# Gestionnaire des boutons interactifs (Inline Keyboards)
+# ---------------------------------------------------------------------------
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not is_authorized(query.from_user.id):
+        await query.answer("Accès non autorisé.", show_alert=True)
+        return
+
+    await query.answer()
+    data = query.data
+    action, _, extra = data.partition(":")
+
+    if action == "screen":
+        if extra == "cancel":
+            await query.edit_message_text("❌ Capture d'écran annulée.")
+        elif extra == "snap":
+            await query.edit_message_text("⏳ Capture en cours...")
+            try:
+                screen_path = capture_ecran_locale()
+                with open(screen_path, "rb") as f:
+                    await query.message.reply_photo(
+                        photo=f,
+                        caption=f"📸 **Capture d'écran PC** ({datetime.datetime.now().strftime('%H:%M:%S')})",
+                        parse_mode="Markdown",
+                    )
+                screen_path.unlink()
+                await query.edit_message_text("✅ Capture d'écran envoyée !")
+            except Exception as e:
+                await query.edit_message_text(f"❌ Échec de la capture d'écran : {e}")
+        return
+
+    # Actions liées à la navigation de fichiers (nav / get)
+    path = path_cache.get_path(extra)
+    if not path:
+        await query.edit_message_text("⚠️ Session expirée. Veuillez relancer la commande /ls ou /find.")
+        return
+
+    try:
+        path = safe_path(str(path))
+    except PermissionError:
         path = RACINE
 
     if action == "nav":
-        try:
-            items = sorted(path.iterdir(), key=tri_fichiers)
-        except PermissionError:
-            await query.edit_message_text(f"Erreur : Permission refusée pour accéder au répertoire {path}.")
-            return
-
-        clavier = []
-        for item in items[:30]:
-            item_pid = path_cache.get_id(item)
-            if item.is_dir():
-                clavier.append([InlineKeyboardButton(f"📁 {item.name}", callback_data=f"nav:{item_pid}")])
-            else:
-                clavier.append([InlineKeyboardButton(f"📄 {item.name}", callback_data=f"get:{item_pid}")])
-
-        # Afficher le bouton parent uniquement si on n'est pas déjà à la racine utilisateur
-        if path != RACINE and path.is_relative_to(RACINE):
-            parent_pid = path_cache.get_id(path.parent)
-            clavier.append([InlineKeyboardButton("⬅️ Dossier parent", callback_data=f"nav:{parent_pid}")])
-
-        await query.edit_message_text(f"📂 Dossier : {path}", reply_markup=InlineKeyboardMarkup(clavier))
+        await show_directory(query, path)
 
     elif action == "get":
         if not path.is_file():
-            await query.edit_message_text(f"❌ Fichier introuvable : {path.name}")
+            await query.edit_message_text(f"❌ Fichier introuvable : `{path.name}`", parse_mode="Markdown")
             return
+
+        taille = path.stat().st_size
+        if taille > MAX_FILE_SIZE:
+            mo = taille / (1024 * 1024)
+            await query.edit_message_text(
+                f"⚠️ Fichier trop volumineux pour Telegram (> 50 Mo).\nTaille : `{mo:.1f} Mo`.",
+                parse_mode="Markdown",
+            )
+            return
+
         try:
             with open(path, "rb") as f:
                 await query.message.reply_document(document=f, filename=path.name)
-            await query.edit_message_text(f"✅ Fichier envoyé : {path.name}")
+            await query.edit_message_text(f"✅ **Fichier envoyé :** `{path.name}`", parse_mode="Markdown")
         except Exception as e:
-            await query.edit_message_text(f"❌ Erreur d'envoi : {e}")
+            await query.edit_message_text(f"❌ Erreur lors de l'envoi : {e}")
 
 
+# ---------------------------------------------------------------------------
 # Gestionnaire d'erreurs global
+# ---------------------------------------------------------------------------
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     print(f"⚠️ Erreur interceptée : {context.error}")
 
 
-# Configuration du menu officiel des commandes Telegram
+# ---------------------------------------------------------------------------
+# Enregistrement des commandes dans le menu officiel Telegram
+# ---------------------------------------------------------------------------
 async def post_init(application: Application) -> None:
     commandes = [
-        BotCommand("start", "Démarrer le bot"),
-        BotCommand("menu", "Afficher la liste des commandes"),
-        BotCommand("help", "Afficher l'aide"),
-        BotCommand("ls", "Parcourir les fichiers et dossiers"),
-        BotCommand("getfile", "Télécharger un fichier spécifique"),
+        BotCommand("start", "Démarrer le bot et afficher l'accueil"),
+        BotCommand("help", "Afficher la liste des commandes"),
+        BotCommand("ls", "Parcourir les dossiers et fichiers"),
+        BotCommand("find", "Chercher un fichier par son nom"),
+        BotCommand("get", "Télécharger un fichier (< 50 Mo)"),
+        BotCommand("status", "Afficher l'état du PC (CPU, RAM, Disque, Uptime)"),
+        BotCommand("screenshot", "Prendre une capture d'écran du PC"),
     ]
     await application.bot.set_my_commands(commandes)
 
 
+# ---------------------------------------------------------------------------
+# Point d'entrée principal
+# ---------------------------------------------------------------------------
 def main() -> None:
-    req = HTTPXRequest(connect_timeout=20.0, read_timeout=20.0)
+    if not TOKEN:
+        print("❌ Erreur : BOT_TOKEN introuvable. Veuillez renseigner le fichier Bot/.env.")
+        return
+
+    req = HTTPXRequest(connect_timeout=25.0, read_timeout=25.0)
     app = (
         Application.builder()
-        .token(token)
+        .token(TOKEN)
         .request(req)
         .get_updates_request(req)
         .post_init(post_init)
@@ -244,13 +576,23 @@ def main() -> None:
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler(["help", "menu"], help_command))
-    app.add_handler(CommandHandler("getfile", get_file))
     app.add_handler(CommandHandler("ls", ls))
+    app.add_handler(CommandHandler("find", find_file))
+    app.add_handler(CommandHandler(["get", "getfile"], get_file))
+    app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("screenshot", screenshot_command))
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, receive_file))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_error_handler(error_handler)
 
-    print("Bot démarré...")
+    print("🚀 ORION Bot (V0.5) démarré avec succès !")
+    print(f"📁 Racine autorisée : {RACINE}")
+    print(f"📥 Dossier de réception : {INBOX}")
+    if OWNER_ID:
+        print(f"🔒 Mode sécurisé : restreint à l'utilisateur ID {OWNER_ID}")
+    else:
+        print("ℹ️ Mode ouvert : aucun OWNER_ID défini dans .env")
+
     app.run_polling()
 
 
