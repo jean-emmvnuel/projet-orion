@@ -2,6 +2,8 @@ import os
 import time
 import shutil
 import hashlib
+import zipfile
+import asyncio
 import datetime
 import tempfile
 import subprocess
@@ -145,6 +147,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🔹 `/ls [dossier]` — Explorer les dossiers avec des boutons interactifs\n"
         "🔹 `/find <motif>` — Rechercher rapidement un fichier par son nom\n"
         "🔹 `/get <chemin>` — Télécharger un fichier spécifique (< 50 Mo)\n"
+        "🔹 `/zip <dossier>` — Compresser un dossier en zip et l'envoyer (< 50 Mo)\n"
         "🔹 `/status` — État du PC (CPU, RAM, Disque, Durée de démarrage)\n"
         "🔹 `/screenshot` ou `/shot` — Capture d'écran distante (avec confirmation préalable)\n\n"
         f"📎 **Envoi de fichiers :**\n"
@@ -187,10 +190,14 @@ async def show_directory(update_or_query, dossier: Path) -> None:
         else:
             clavier.append([InlineKeyboardButton(f"📄 {item.name}", callback_data=f"get:{pid}")])
 
-    # Bouton retour vers dossier parent si pas à la racine
+    # Boutons d'action : zipper le dossier actuel et remonter au parent
     if dossier != RACINE:
+        dossier_pid = path_cache.get_id(dossier)
         parent_pid = path_cache.get_id(dossier.parent)
-        clavier.append([InlineKeyboardButton("⬅️ Dossier parent", callback_data=f"nav:{parent_pid}")])
+        clavier.append([
+            InlineKeyboardButton("📦 Zipper ce dossier", callback_data=f"zip:{dossier_pid}"),
+            InlineKeyboardButton("⬅️ Dossier parent", callback_data=f"nav:{parent_pid}"),
+        ])
 
     markup = InlineKeyboardMarkup(clavier)
     texte = f"📂 **Dossier :** `{dossier}`\n_Cliquez sur un sous-dossier ou un fichier à télécharger :_"
@@ -310,6 +317,93 @@ async def get_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await msg_status.delete()
     except Exception as e:
         await msg_status.edit_text(f"❌ Erreur lors de l'envoi : {e}")
+
+
+# ---------------------------------------------------------------------------
+# Commande /zip : Compression et envoi d'un dossier
+# ---------------------------------------------------------------------------
+def creer_archive_zip(dossier: Path) -> Path:
+    """Crée une archive zip temporaire en excluant les dossiers virtuels et caches."""
+    fd, tmp_file = tempfile.mkstemp(suffix=".zip", prefix=f"orion_{dossier.name}_")
+    os.close(fd)
+    tmp_path = Path(tmp_file)
+
+    with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(dossier):
+            # Exclure les dossiers lourds et cachés
+            dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith(".")]
+            for f in files:
+                f_path = Path(root) / f
+                try:
+                    arcname = f_path.relative_to(dossier)
+                    zf.write(f_path, arcname)
+                except Exception:
+                    continue
+    return tmp_path
+
+
+async def traiter_envoi_zip(message, dossier: Path) -> None:
+    """Gère la compression asynchrone et l'envoi d'un dossier en respectant la limite de 50 Mo."""
+    msg_status = await message.reply_text(f"⏳ Compression du dossier `{dossier.name}` en cours...", parse_mode="Markdown")
+    zip_path = None
+    try:
+        zip_path = await asyncio.to_thread(creer_archive_zip, dossier)
+        taille = zip_path.stat().st_size
+        taille_mo = taille / (1024 * 1024)
+
+        if taille > MAX_FILE_SIZE:
+            await msg_status.edit_text(
+                f"⚠️ L'archive zip dépasse la limite de 50 Mo de Telegram.\nTaille obtenue : `{taille_mo:.1f} Mo`.\n"
+                "💡 Conseil : Choisissez un sous-dossier plus restreint.",
+                parse_mode="Markdown",
+            )
+            return
+
+        with open(zip_path, "rb") as f:
+            await message.reply_document(
+                document=f,
+                filename=f"{dossier.name}.zip",
+                caption=f"📦 **Archive zip :** `{dossier.name}.zip` (`{taille_mo:.1f} Mo`)",
+                parse_mode="Markdown",
+            )
+        await msg_status.delete()
+    except Exception as e:
+        await msg_status.edit_text(f"❌ Erreur lors de la compression : {e}")
+    finally:
+        if zip_path and zip_path.exists():
+            zip_path.unlink()
+
+
+async def zip_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_authorized(update.effective_user.id):
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "💡 Usage : `/zip <chemin_dossier>` (ex: `/zip Documents/Projet` ou `/zip .`)",
+            parse_mode="Markdown",
+        )
+        return
+
+    raw_path = " ".join(context.args)
+    try:
+        dossier = safe_path(raw_path)
+    except Exception as e:
+        await update.message.reply_text(f"⛔ {e}")
+        return
+
+    if not dossier.is_dir():
+        await update.message.reply_text(f"❌ Ce chemin n'est pas un dossier valide : `{dossier}`", parse_mode="Markdown")
+        return
+
+    if dossier == RACINE:
+        await update.message.reply_text(
+            "⛔ Impossible de zipper l'intégralité du répertoire personnel (trop volumineux).\nVeuillez spécifier un sous-dossier.",
+            parse_mode="Markdown",
+        )
+        return
+
+    await traiter_envoi_zip(update.message, dossier)
 
 
 # ---------------------------------------------------------------------------
@@ -643,6 +737,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         except Exception as e:
             await query.edit_message_text(f"❌ Erreur lors de l'envoi : {e}")
 
+    elif action == "zip":
+        if not path.is_dir():
+            await query.edit_message_text(f"❌ Dossier introuvable : `{path.name}`", parse_mode="Markdown")
+            return
+        if path == RACINE:
+            await query.edit_message_text("⛔ Impossible de zipper l'intégralité du répertoire personnel.", parse_mode="Markdown")
+            return
+        await traiter_envoi_zip(query.message, path)
+
 
 # ---------------------------------------------------------------------------
 # Gestionnaire d'erreurs global
@@ -661,6 +764,7 @@ async def post_init(application: Application) -> None:
         BotCommand("ls", "Parcourir les dossiers et fichiers"),
         BotCommand("find", "Chercher un fichier par son nom"),
         BotCommand("get", "Télécharger un fichier (< 50 Mo)"),
+        BotCommand("zip", "Zipper un dossier et l'envoyer (< 50 Mo)"),
         BotCommand("status", "Afficher l'état du PC (CPU, RAM, Disque, Uptime)"),
         BotCommand("screenshot", "Prendre une capture d'écran du PC"),
     ]
@@ -690,6 +794,7 @@ def main() -> None:
     app.add_handler(CommandHandler("ls", ls))
     app.add_handler(CommandHandler("find", find_file))
     app.add_handler(CommandHandler(["get", "getfile"], get_file))
+    app.add_handler(CommandHandler("zip", zip_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler(["screenshot", "shot"], screenshot_command))
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, receive_file))

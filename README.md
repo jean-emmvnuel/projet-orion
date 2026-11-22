@@ -73,16 +73,17 @@ Le projet est actuellement à l'étape des versions **V0 (Atelier)** et **V0.5 (
 ### 2. V0.5 — Messager (Bot Telegram opérationnel)
 Situé dans le dossier `Bot/`, ce module offre une première victoire concrète : piloter le PC depuis son smartphone via Telegram, sans ouverture de port grâce au *long polling*.
 
-**Fonctionnalités déjà implémentées (`Bot/bot.py`) :**
+**Fonctionnalités complètes de la V0.5 (`Bot/bot.py`) :**
 - 🔹 **/start** : Accueil personnalisé et vérification du statut du bot.
 - 🔹 **/help** & **/menu** : Liste interactive des commandes disponibles.
-- 🔹 **/ls `[dossier]`** : Explorateur de fichiers interactif sous forme de boutons en ligne (*Inline Keyboard*) :
-  - Navigation dynamique dans les dossiers (dossier parent, sous-dossiers).
-  - Cache MD5 des chemins pour contourner la limite stricte de 64 octets imposée par l'API Telegram (`callback_data`).
-  - Pagination automatique (30 premiers éléments par vue).
-- 🔹 **/getfile `<chemin>`** ou **clic sur un fichier** : Téléchargement direct et sécurisé d'un fichier du PC vers la discussion Telegram.
-- 🔹 **Réception automatique de documents et photos** : Tout fichier envoyé dans la conversation est automatiquement sauvegardé sur le PC dans le dossier `~/reçus`.
-- 🛡️ **Sécurité des chemins** : Confinement strict dans le dossier utilisateur personnel (`is_relative_to(RACINE)`), interdisant tout accès non autorisé au reste du système.
+- 🔹 **/ls `[dossier]`** : Explorateur de fichiers interactif avec boutons en ligne (*Inline Keyboard*), navigation hiérarchique et bouton direct pour zipper le dossier courant.
+- 🔹 **/find `<motif>`** : Recherche rapide et récursive de fichiers par nom avec boutons de téléchargement direct.
+- 🔹 **/get `<chemin>`** ou **clic sur un fichier** : Téléchargement direct d'un fichier du PC vers Telegram (< 50 Mo).
+- 🔹 **/zip `<dossier>`** : Compression asynchrone d'un dossier en archive `.zip` et envoi direct dans la discussion.
+- 🔹 **/status** : Télémétrie en direct du PC (charge CPU, utilisation RAM, espace disque et durée d'activité Uptime).
+- 🔹 **/screenshot** (ou **/shot**) : Prise de capture d'écran distante de votre PC avec confirmation par bouton (support natif Wayland GNOME, Flameshot et X11).
+- 🔹 **Réception automatique de documents et photos** : Tout fichier envoyé dans la conversation est automatiquement sauvegardé sur le PC dans `~/Downloads/ORION` (ou `~/Téléchargements/ORION`).
+- 🛡️ **Sécurité des chemins & accès** : Confinement strict sous le dossier utilisateur personnel (`safe_path`), gestion de la limite Telegram (50 Mo), et restriction optionnelle par `OWNER_ID`.
 
 ---
 
