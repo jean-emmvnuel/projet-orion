@@ -1,0 +1,38 @@
+{
+  "brand": "ORION",
+  "tagline": "Ton assistant personnel, sur tous tes appareils",
+  "brief": "Assistant personnel open source, auto-hébergé et multi-appareils : chaque appareil pilote les autres et peut être piloté, tout passe par le Core, l'utilisateur garde la main.",
+  "adjectives": ["fiable", "ouvert", "attentif", "souverain"],
+  "criteria": "Réussite : propre à ORION (pas de robot, cerveau ni étincelle), lisible à 16 px, fonctionne en une couleur, sur fond clair comme sombre.",
+  "mockups": ["readme", "terminal", "app-icon", "website", "sticker", "social"],
+  "nav": ["Documentation", "Feuille de route", "GitHub"],
+  "brand_color": "#9810e6",
+  "tile_color": "#1a1919",
+  "greyscale": false,
+  "final": true,
+  "deck_title": "identité finale",
+  "designer": "Projet ORION",
+  "concepts": [
+    {
+      "name": "Ceinture pensante",
+      "symbol": "svg/orion-symbol-color.svg",
+      "lockup": "svg/orion-horizontal-color.svg",
+      "stacked": "svg/orion-stacked-color.svg",
+      "avatar": "svg/orion-symbol-small-color.svg",
+      "symbol_on_tile": "svg/orion-symbol-small-reversed.svg",
+      "symbol_on_dark": "svg/orion-symbol-small-reversed.svg",
+      "lockup_on_dark": "svg/orion-horizontal-reversed.svg",
+      "stacked_on_dark": "svg/orion-stacked-reversed.svg",
+      "stacked_on_tile": "svg/orion-stacked-reversed.svg",
+      "idea": "La ceinture d'Orion devient les « … » d'un assistant qui réfléchit, dans le O d'ORION.",
+      "rationale": [
+        "Trois lectures en un regard : le O du nom, la constellation, l'assistant au travail",
+        "L'inclinaison de 20° rend les trois points propres à ORION",
+        "S'anime naturellement : les étoiles s'allument une à une pendant que l'agent travaille",
+        "Deux couleurs de la charte, une version pour fond clair et une pour fond sombre"
+      ]
+    }
+  ],
+  "recommendation": "Version finale : symbole, versions horizontale et empilée, favicon adaptatif et icônes d'application.",
+  "next_steps": ["Ajouter le logo au README et au dépôt", "Intégrer favicon et icônes dans l'application Flet", "Recherche d'antériorité de marque avant publication"]
+}

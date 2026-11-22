@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 656 256" width="656" height="256" role="img" aria-label="ORION Logo">
+  <title>ORION</title>
+  <style>
+    .orion-arc { stroke: #1a1919; }
+    .orion-node { fill: #9810e6; }
+    .orion-text { stroke: #1a1919; }
+    .orion-fill { fill: #1a1919; }
+    @media (prefers-color-scheme: dark) {
+      .orion-arc { stroke: #f5f5f7; }
+      .orion-node { fill: #b15cf0; }
+      .orion-text { stroke: #f5f5f7; }
+      .orion-fill { fill: #f5f5f7; }
+    }
+  </style>
+  <!-- Concept 1 - Logo B : O réciproque -->
+  <g class="symbol">
+    <path class="orion-arc" d="M67.19 67.19 A86 86 0 0 1 213.67 135.50" fill="none" stroke-width="24"/>
+    <circle class="orion-node" cx="67.19" cy="67.19" r="25"/>
+    <path class="orion-arc" d="M188.81 188.81 A86 86 0 0 1 42.33 120.50" fill="none" stroke-width="24"/>
+    <circle class="orion-node" cx="188.81" cy="188.81" r="25"/>
+  </g>
+  <g class="wordmark" transform="translate(304 64) scale(0.5)">
+    <circle class="orion-text" cx="80" cy="128" r="68.5" fill="none" stroke-width="26" stroke-linejoin="miter" stroke-miterlimit="10"/>
+    <path class="orion-text" d="M203.0 208 V61.0 H252 A37 37 0 0 1 252 135.0 H203.0 M250 135.0 L302 208" fill="none" stroke-width="26" stroke-linejoin="miter" stroke-miterlimit="10"/>
+    <path class="orion-text" d="M351.0 48 V208" fill="none" stroke-width="26" stroke-linejoin="miter" stroke-miterlimit="10"/>
+    <circle class="orion-text" cx="474" cy="128" r="68.5" fill="none" stroke-width="26" stroke-linejoin="miter" stroke-miterlimit="10"/>
+    <path class="orion-fill" d="M584 48 H614 L676 156 V48 H702 V208 H672 L610 100 V208 H584 Z"/>
+  </g>
+</svg>
