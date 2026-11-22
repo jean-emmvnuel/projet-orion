@@ -944,6 +944,29 @@ body {
 }
 
 /* Responsive */
+
+/* 3D & Split animation helpers */
+.pillar-card, .version-card-inner {
+  perspective: 800px;
+}
+
+.split-char {
+  display: inline-block;
+  will-change: transform, opacity;
+}
+
+.word-wrap {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 4px;
+}
+
+.word {
+  display: inline-block;
+}
+
+/* Responsive */
 @media (max-width: 992px) {
   .nodes-grid {
     grid-template-columns: 1fr;
