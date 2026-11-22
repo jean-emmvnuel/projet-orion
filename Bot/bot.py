@@ -146,7 +146,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🔹 `/find <motif>` — Rechercher rapidement un fichier par son nom\n"
         "🔹 `/get <chemin>` — Télécharger un fichier spécifique (< 50 Mo)\n"
         "🔹 `/status` — État du PC (CPU, RAM, Disque, Durée de démarrage)\n"
-        "🔹 `/screenshot` — Capture d'écran distante (avec confirmation préalable)\n\n"
+        "🔹 `/screenshot` ou `/shot` — Capture d'écran distante (avec confirmation préalable)\n\n"
         f"📎 **Envoi de fichiers :**\n"
         f"Tout document ou photo envoyé dans cette discussion est automatiquement enregistré dans `{INBOX}`."
     )
@@ -399,41 +399,138 @@ async def screenshot_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(texte, reply_markup=InlineKeyboardMarkup(clavier), parse_mode="Markdown")
 
 
+def get_desktop_env() -> dict:
+    """Prépare un dictionnaire d'environnement enrichi pour accéder à la session graphique active."""
+    env = os.environ.copy()
+    uid = os.getuid()
+    user_run = f"/run/user/{uid}"
+
+    if "DBUS_SESSION_BUS_ADDRESS" not in env or not env["DBUS_SESSION_BUS_ADDRESS"]:
+        bus_file = f"{user_run}/bus"
+        if os.path.exists(bus_file):
+            env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={bus_file}"
+
+    if "XDG_RUNTIME_DIR" not in env or not env["XDG_RUNTIME_DIR"]:
+        if os.path.exists(user_run):
+            env["XDG_RUNTIME_DIR"] = user_run
+
+    if "WAYLAND_DISPLAY" not in env or not env["WAYLAND_DISPLAY"]:
+        if os.path.exists(f"{user_run}/wayland-0"):
+            env["WAYLAND_DISPLAY"] = "wayland-0"
+
+    if "DISPLAY" not in env or not env["DISPLAY"]:
+        env["DISPLAY"] = ":0"
+
+    return env
+
+
 def capture_ecran_locale() -> Path:
-    """Capture l'écran du PC sous Linux (Wayland via grim ou X11 via Pillow)."""
+    """
+    Capture l'écran du PC sous Linux avec détection multi-méthodes :
+    1. GNOME Shell D-Bus (natif Ubuntu / GNOME Wayland & X11)
+    2. Flameshot (CLI Wayland / X11)
+    3. grim (standard Wayland wlroots)
+    4. gnome-screenshot / scrot / import
+    5. Pillow ImageGrab (X11 fallback)
+    """
     fd, tmp_file = tempfile.mkstemp(suffix=".png", prefix="orion_screen_")
     os.close(fd)
     tmp_path = Path(tmp_file)
+    env = get_desktop_env()
+    erreurs = []
 
-    # 1. Tentative avec grim (standard Wayland sous Linux)
+    # 1. GNOME Shell D-Bus (Inclus par défaut sur Ubuntu / GNOME, fonctionne en natif Wayland)
     try:
-        subprocess.run(["grim", str(tmp_path)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        res = subprocess.run(
+            [
+                "gdbus",
+                "call",
+                "--session",
+                "--dest",
+                "org.gnome.Shell.Screenshot",
+                "--object-path",
+                "/org/gnome/Shell/Screenshot",
+                "--method",
+                "org.gnome.Shell.Screenshot.Screenshot",
+                "false",
+                "false",
+                str(tmp_path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=8,
+            env=env,
+        )
+        if res.returncode == 0 and tmp_path.exists() and tmp_path.stat().st_size > 0:
+            return tmp_path
+        if res.stderr:
+            erreurs.append(f"GNOME D-Bus: {res.stderr.strip()[:60]}")
+    except Exception as e:
+        erreurs.append(f"GNOME D-Bus: {e}")
+
+    # 2. Flameshot (installé sur Ubuntu)
+    try:
+        res = subprocess.run(
+            ["flameshot", "full", "-p", str(tmp_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=8,
+            env=env,
+        )
+        time.sleep(0.5)
         if tmp_path.exists() and tmp_path.stat().st_size > 0:
             return tmp_path
-    except Exception:
-        pass
+    except Exception as e:
+        erreurs.append(f"Flameshot: {e}")
 
-    # 2. Fallback avec Pillow ImageGrab si installé
-    if ImageGrab:
-        try:
-            img = ImageGrab.grab()
-            img.save(tmp_path, "PNG")
+    # 3. grim (standard Wayland Sway / Hyprland)
+    try:
+        subprocess.run(
+            ["grim", str(tmp_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            env=env,
+        )
+        if tmp_path.exists() and tmp_path.stat().st_size > 0:
             return tmp_path
-        except Exception:
-            pass
+    except Exception as e:
+        erreurs.append(f"grim: {e}")
 
-    # 3. Fallback avec gnome-screenshot ou scrot
-    for cmd in [["gnome-screenshot", "-f", str(tmp_path)], ["scrot", str(tmp_path)]]:
+    # 4. Utilitaires X11 / GNOME classiques
+    commandes_alternatives = [
+        ["gnome-screenshot", "-f", str(tmp_path)],
+        ["scrot", str(tmp_path)],
+        ["import", "-window", "root", str(tmp_path)],
+        ["spectacle", "-b", "-n", "-o", str(tmp_path)],
+    ]
+    for cmd in commandes_alternatives:
         try:
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, env=env)
             if tmp_path.exists() and tmp_path.stat().st_size > 0:
                 return tmp_path
         except Exception:
             continue
 
+    # 5. Pillow ImageGrab (si disponible sous X11)
+    if ImageGrab:
+        try:
+            img = ImageGrab.grab()
+            img.save(tmp_path, "PNG")
+            if tmp_path.exists() and tmp_path.stat().st_size > 0:
+                return tmp_path
+        except Exception as e:
+            erreurs.append(f"Pillow ImageGrab: {e}")
+
     if tmp_path.exists():
         tmp_path.unlink()
-    raise RuntimeError("Aucun outil de capture d'écran disponible ou session graphique introuvable.")
+
+    detail_err = " ; ".join(erreurs[:2]) if erreurs else "session graphique introuvable"
+    raise RuntimeError(
+        f"Impossible de capturer l'écran ({detail_err}).\n"
+        "💡 Astuce : Installez `gnome-screenshot` via `sudo apt install gnome-screenshot` pour une compatibilité maximale."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -483,18 +580,32 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.edit_message_text("❌ Capture d'écran annulée.")
         elif extra == "snap":
             await query.edit_message_text("⏳ Capture en cours...")
+            screen_path = None
             try:
                 screen_path = capture_ecran_locale()
-                with open(screen_path, "rb") as f:
-                    await query.message.reply_photo(
-                        photo=f,
-                        caption=f"📸 **Capture d'écran PC** ({datetime.datetime.now().strftime('%H:%M:%S')})",
-                        parse_mode="Markdown",
-                    )
-                screen_path.unlink()
+                # Tenter l'envoi en photo, puis en document si photo échoue
+                try:
+                    with open(screen_path, "rb") as f:
+                        await query.message.reply_photo(
+                            photo=f,
+                            caption=f"📸 **Capture d'écran PC** ({datetime.datetime.now().strftime('%H:%M:%S')})",
+                            parse_mode="Markdown",
+                        )
+                except Exception:
+                    with open(screen_path, "rb") as f:
+                        await query.message.reply_document(
+                            document=f,
+                            filename="screenshot.png",
+                            caption=f"📸 **Capture d'écran PC** ({datetime.datetime.now().strftime('%H:%M:%S')})",
+                            parse_mode="Markdown",
+                        )
                 await query.edit_message_text("✅ Capture d'écran envoyée !")
             except Exception as e:
-                await query.edit_message_text(f"❌ Échec de la capture d'écran : {e}")
+                print(f"⚠️ Erreur capture d'écran : {e}")
+                await query.edit_message_text(f"❌ Échec de la capture d'écran :\n{e}")
+            finally:
+                if screen_path and screen_path.exists():
+                    screen_path.unlink()
         return
 
     # Actions liées à la navigation de fichiers (nav / get)
@@ -580,7 +691,7 @@ def main() -> None:
     app.add_handler(CommandHandler("find", find_file))
     app.add_handler(CommandHandler(["get", "getfile"], get_file))
     app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CommandHandler("screenshot", screenshot_command))
+    app.add_handler(CommandHandler(["screenshot", "shot"], screenshot_command))
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, receive_file))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_error_handler(error_handler)
