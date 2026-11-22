@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ORION — Assistant Personnel Autonome & Multidirectionnel</title>
+  <meta name="description" content="Site vitrine officiel et PWA du projet ORION : assistant personnel multi-appareils, du contrôle distant en V0.5 jusqu'à l'assistant autonome Jarvis.">
+
+  <!-- PWA & Mobile Meta Tags -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#9810e6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ORION">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="shortcut icon" href="assets/favicon.ico">
+
+  <!-- OpenGraph / Social Meta -->
+  <meta property="og:title" content="ORION — Assistant Personnel Multidirectionnel">
+  <meta property="og:description" content="Du MVP pratique à Jarvis : pilotez n'importe lequel de vos appareils depuis n'importe quel autre.">
+  <meta property="og:image" content="assets/icon-512.png">
+  <meta property="og:type" content="website">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- GSAP & ScrollTrigger -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+
+  <!-- Animated Cosmic Background -->
+  <canvas id="space-canvas"></canvas>
+  <div class="ambient-glow"></div>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="container">
+      <a href="#" class="brand">
+        <img src="assets/logo-dark.svg" alt="ORION Logo" class="brand-logo">
+      </a>
+
+      <nav>
+        <ul class="nav-links">
+          <li><a href="#vision" class="nav-link">Vision</a></li>
+          <li><a href="#architecture" class="nav-link">Architecture</a></li>
+          <li><a href="#roadmap" class="nav-link">Roadmap (V0 → V9)</a></li>
+          <li><a href="#bot-v05" class="nav-link">Bot V0.5</a></li>
+          <li><a href="#securite" class="nav-link">Sécurité</a></li>
+        </ul>
+      </nav>
+
+      <div class="nav-actions">
+        <button class="btn btn-pwa btn-install-pwa" style="display: none;">
+          📱 Installer l'App
+        </button>
+        <a href="https://github.com/jean-emmvnuel/projet-orion" target="_blank" rel="noopener" class="btn btn-secondary">
+          GitHub
+        </a>
+        <button class="menu-toggle" aria-label="Menu Mobile">☰</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-pill-badge">
+        <span class="status-dot"></span>
+        <span>Version actuelle : V0 (Atelier) & V0.5 (Messager)</span>
+      </div>
+
+      <h1>
+        L'Assistant Personnel <br>
+        <span class="text-gradient">Multi-appareils & Multidirectionnel</span>
+      </h1>
+
+      <p class="hero-subtitle">
+        ORION reçoit un ordre sur <strong>n'importe lequel</strong> de vos appareils et l'exécute sur <strong>n'importe quel autre</strong>. Un écosystème souverain sans cloud tiers imposé, du bot Telegram léger jusqu'à un Jarvis autonome.
+      </p>
+
+      <div class="hero-ctas">
+        <a href="#roadmap" class="btn btn-primary">Explorer les 9 Versions (V0 → V9)</a>
+        <a href="#bot-v05" class="btn btn-secondary">Tester le Bot V0.5 en direct</a>
+        <button class="btn btn-pwa btn-install-pwa" style="display: none;">Installer la PWA</button>
+      </div>
+
+      <!-- Hero Interactive Architecture Visual -->
+      <div class="device-network-visual">
+        <div class="nodes-grid">
+          <!-- Node 1: PC Linux -->
+          <div class="node-card">
+            <span class="node-icon">💻</span>
+            <h4 class="node-title">PC Linux</h4>
+            <p class="node-desc">Service systemd · Agent Python · Exécution de scripts · Transferts sécurisés</p>
+          </div>
+
+          <!-- Central Hub: ORION Core -->
+          <div class="network-hub">
+            <div class="hub-core">
+              <img src="assets/logo-symbol.svg" alt="Symbole ORION" class="hub-symbol">
+              <span class="hub-label">ORION CORE</span>
+            </div>
+            <div class="connection-lines">
+              <span>◄ MQTT TLS ►</span>
+              <span class="traffic-pulse">● ÉCHANGE FLUIDE</span>
+              <span>◄ WEBSOCKET ►</span>
+            </div>
+          </div>
+
+          <!-- Node 2: Mobile Android -->
+          <div class="node-card">
+            <span class="node-icon">📱</span>
+            <h4 class="node-title">Téléphone Android</h4>
+            <p class="node-desc">Application Flet · Extension native Dart · Réveil FCM · Télémétrie</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Vision & Philosophie -->
+  <section id="vision" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Philosophie de Conception</span>
+        <h2 class="section-title">Pourquoi ORION est fondamentalement différent</h2>
+        <p class="section-description">
+          Une rupture avec les assistants conventionnels : fini l'asymétrie maître/esclave et la dépendance aux clouds opaques.
+        </p>
+      </div>
+
+      <div class="pillars-grid">
+        <!-- Pilier 1 -->
+        <div class="pillar-card">
+          <div class="pillar-icon">🔄</div>
+          <h3 class="pillar-title">Multidirectionnalité Totale</h3>
+          <p class="pillar-text">
+            Chaque appareil est à la fois client et exécutant. Depuis votre smartphone, ordonnez au PC d'envoyer un contrat ou de lancer un script. Depuis votre bureau, faites sonner votre smartphone silencieux ou importez vos photos du jour instantanément.
+          </p>
+        </div>
+
+        <!-- Pilier 2 -->
+        <div class="pillar-card">
+          <div class="pillar-icon">🛡️</div>
+          <h3 class="pillar-title">Zero-Trust & Souveraineté</h3>
+          <p class="pillar-text">
+            Vos données personnelles et fichiers ne transitent par aucun serveur privé tiers. Toutes les liaisons à distance s'appuient sur un réseau privé maillé <strong>Tailscale</strong> (WireGuard) et du chiffrement TLS de bout en bout avec contrôle d'accès strict.
+          </p>
+        </div>
+
+        <!-- Pilier 3 -->
+        <div class="pillar-card">
+          <div class="pillar-icon">⭐</div>
+          <h3 class="pillar-title">La Règle d'Or Pédagogique</h3>
+          <p class="pillar-text">
+            Chaque version (V0 à V9) apporte une capacité directement utilisable au quotidien et introduit un lot ciblé de technologies. On ne passe à l'étape suivante que lorsque la précédente est testée, documentée et expliquée ligne par ligne.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture Simplifiée -->
+  <section id="architecture" class="section" style="background: rgba(14, 14, 20, 0.5);">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Socle Technique</span>
+        <h2 class="section-title">Une Architecture en Étoile Robuste</h2>
+        <p class="section-description">
+          Un cœur unifié sous FastAPI, orchestrant des agents légers via un bus d'événements temps réel.
+        </p>
+      </div>
+
+      <div class="pillars-grid">
+        <div class="pillar-card">
+          <div class="pillar-icon">⚡</div>
+          <h3 class="pillar-title">ORION Core (FastAPI)</h3>
+          <p class="pillar-text">
+            Le cerveau central : gestion des identités (Argon2id / JWT / TOTP), registre des appareils appairés, file de commandes asynchrones, base PostgreSQL et cache Redis pour la présence immédiate.
+          </p>
+        </div>
+
+        <div class="pillar-card">
+          <div class="pillar-icon">📡</div>
+          <h3 class="pillar-title">Bus MQTT (Mosquitto)</h3>
+          <p class="pillar-text">
+            Messagerie ultra-légère et chiffrée. Permet la détection de déconnexion inattendue via le mécanisme de testament (*Last Will*) et le passage transparent des pare-feux sans ouverture de port.
+          </p>
+        </div>
+
+        <div class="pillar-card">
+          <div class="pillar-icon">📱</div>
+          <h3 class="pillar-title">Application Unique Flet</h3>
+          <p class="pillar-text">
+            Une interface moderne écrite en Python avec <strong>Flet</strong>, compilée pour le bureau Linux, Android et le web. Accès aux fonctions natives du smartphone via une micro-extension Dart dédiée.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Roadmap Complète (Chaque version V0 à V9) -->
+  <section id="roadmap" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Feuille de Route Détaillée</span>
+        <h2 class="section-title">De l'Atelier initial à l'Assistant Jarvis</h2>
+        <p class="section-description">
+          Découvrez en détail chacune des étapes jalonnant le développement d'ORION, leurs capacités et leurs technologies.
+        </p>
+      </div>
+
+      <!-- Filtres interactifs -->
+      <div class="roadmap-controls">
+        <button class="filter-btn active" data-filter="all">Toutes les versions (11)</button>
+        <button class="filter-btn" data-filter="current">Actuelles (V0, V0.5)</button>
+        <button class="filter-btn" data-filter="core">Fondations (V1 - V3)</button>
+        <button class="filter-btn" data-filter="sense">Perception (V4 - V6)</button>
+        <button class="filter-btn" data-filter="future">Autonomie (V7 - V9)</button>
+      </div>
+
+      <!-- Timeline Container -->
+      <div class="timeline-container">
+        <div class="timeline-line"></div>
+
+        <!-- V0 -->
+        <div class="version-card done" data-category="current">
+          <div class="version-marker">✓</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V0</span>
+                <h3 class="version-name">Atelier — Préparer l'Environnement</h3>
+              </div>
+              <span class="status-tag status-done">Terminé & Validé</span>
+            </div>
+            <p class="version-tagline">Le socle de développement professionnel</p>
+            <p class="version-description">
+              Mise en place de l'environnement complet de travail sous Linux, configuration de Python 3.12+, pipeline d'intégration continue GitHub Actions avec Ruff et pytest, et outillage monorepo.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">Linux Natif</span>
+              <span class="tech-pill">Python 3.12+</span>
+              <span class="tech-pill">Git Monorepo</span>
+              <span class="tech-pill">Ruff Linter</span>
+              <span class="tech-pill">Docker</span>
+              <span class="tech-pill">Flet (Banc d'essai)</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Structure monorepo conforme (core, agent, app, cli, infra, docs)</li>
+              <li><span class="bullet">▸</span> Protection stricte des secrets via .gitignore</li>
+              <li><span class="bullet">▸</span> Pipeline CI automatisé et journal de bord quotidien</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V0.5 -->
+        <div class="version-card active-now" data-category="current">
+          <div class="version-marker">★</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V0.5</span>
+                <h3 class="version-name">Messager — Le Bot Telegram Autonome</h3>
+              </div>
+              <span class="status-tag status-active">Opérationnel (En production)</span>
+            </div>
+            <p class="version-tagline">Une première victoire concrète en trois semaines</p>
+            <p class="version-description">
+              Un bot Telegram hébergé sur le PC qui permet d'explorer l'arborescence de fichiers, de télécharger des documents et d'en recevoir à distance via 4G sans ouvrir de port réseau grâce au *long polling*.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">python-telegram-bot</span>
+              <span class="tech-pill">asyncio</span>
+              <span class="tech-pill">MD5 Path Cache</span>
+              <span class="tech-pill">Confinement safe_path</span>
+              <span class="tech-pill">Boutons interactifs</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Navigation visuelle interactive avec /ls et pagination</li>
+              <li><span class="bullet">▸</span> Téléchargement direct d'un clic avec /getfile</li>
+              <li><span class="bullet">▸</span> Réception automatique des documents/photos dans ~/reçus</li>
+              <li><span class="bullet">▸</span> Sécurité stricte interdisant la sortie du répertoire utilisateur</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V1 -->
+        <div class="version-card" data-category="core">
+          <div class="version-marker">1</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V1</span>
+                <h3 class="version-name">Pont — Téléphone ⇄ PC Bidirectionnel</h3>
+              </div>
+              <span class="status-tag status-next">Prochaine Étape Majeure</span>
+            </div>
+            <p class="version-tagline">La fondation multi-appareils sans compromis</p>
+            <p class="version-description">
+              Le téléphone et le PC se pilotent mutuellement dans les deux sens : transfert de fichiers volumineux, exécution de scripts approuvés, capture d'écran à distance, sonnerie du smartphone et statut en direct.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">FastAPI</span>
+              <span class="tech-pill">PostgreSQL</span>
+              <span class="tech-pill">Redis</span>
+              <span class="tech-pill">MQTT Mosquitto</span>
+              <span class="tech-pill">Flet (Android & Linux)</span>
+              <span class="tech-pill">Tailscale WireGuard</span>
+              <span class="tech-pill">Argon2id + JWT</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Appairage cryptographique d'appareils par QR Code</li>
+              <li><span class="bullet">▸</span> Exécution de scripts système sous liste blanche sécurisée</li>
+              <li><span class="bullet">▸</span> Agent Android autonome avec service de premier plan</li>
+              <li><span class="bullet">▸</span> Commande CLI unifiée `orion` pour terminal</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V2 -->
+        <div class="version-card" data-category="core">
+          <div class="version-marker">2</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V2</span>
+                <h3 class="version-name">Mémoire — ORION Connaît Votre Environnement</h3>
+              </div>
+              <span class="status-tag status-planned">Planifié</span>
+            </div>
+            <p class="version-tagline">Recherche sémantique et mémorisation contextuelle</p>
+            <p class="version-description">
+              Introduction d'une base vectorielle locale et d'un modèle d'embeddings pour retrouver n'importe quel fichier par son sens (« Où est ma facture EDF de juillet ? ») et retenir les préférences de l'utilisateur.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">Qdrant Vector DB</span>
+              <span class="tech-pill">sentence-transformers</span>
+              <span class="tech-pill">Indexation asynchrone</span>
+              <span class="tech-pill">Extraction PDF / Markdown</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Recherche sémantique en langage naturel sur documents</li>
+              <li><span class="bullet">▸</span> Profil utilisateur évolutif et mémoire à long terme</li>
+              <li><span class="bullet">▸</span> Indexation en arrière-plan sans ralentir le système</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V3 -->
+        <div class="version-card" data-category="core">
+          <div class="version-marker">3</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V3</span>
+                <h3 class="version-name">Cerveau — Compréhension et Planification</h3>
+              </div>
+              <span class="status-tag status-planned">Planifié</span>
+            </div>
+            <p class="version-tagline">Boucle agentique LLM et exécution multi-étapes</p>
+            <p class="version-description">
+              ORION acquiert la capacité de décomposer une commande complexe en sous-tâches, de choisir les outils appropriés (Tool Calling / MCP) et d'exécuter des plans avec validation humaine obligatoire pour les actions destructrices.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">Ollama (LLM Local)</span>
+              <span class="tech-pill">APIs LLM Cloud</span>
+              <span class="tech-pill">MCP (Model Context Protocol)</span>
+              <span class="tech-pill">Human-in-the-Loop</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Résumé automatique de documents et réponses raisonnées</li>
+              <li><span class="bullet">▸</span> Planification d'actions multi-appareils coordonnées</li>
+              <li><span class="bullet">▸</span> Garde-fous de sécurité avec confirmation explicite</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V4 -->
+        <div class="version-card" data-category="sense">
+          <div class="version-marker">4</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V4</span>
+                <h3 class="version-name">Voix — Parler et Écouter ORION</h3>
+              </div>
+              <span class="status-tag status-planned">Planifié</span>
+            </div>
+            <p class="version-tagline">Interaction vocale instantanée et naturelle</p>
+            <p class="version-description">
+              Ajout de la détection du mot d'activation (*Wake Word*), de la transcription rapide de la voix en texte (STT) et de la synthèse vocale expressive (TTS) en streaming continu.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">faster-whisper</span>
+              <span class="tech-pill">Silero VAD</span>
+              <span class="tech-pill">Piper TTS</span>
+              <span class="tech-pill">WebRTC / Audio Streaming</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Réveil mains libres à la voix (« Dis Orion »)</li>
+              <li><span class="bullet">▸</span> Dialogue fluide sans latence perceptible</li>
+              <li><span class="bullet">▸</span> Traitement local sur GPU pour préserver la vie privée</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V5 -->
+        <div class="version-card" data-category="sense">
+          <div class="version-marker">5</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V5</span>
+                <h3 class="version-name">Veille — L'Assistant Devient Proactif</h3>
+              </div>
+              <span class="status-tag status-planned">Planifié</span>
+            </div>
+            <p class="version-tagline">Anticipation, alertes et synchronisation des notifications</p>
+            <p class="version-description">
+              ORION ne se contente plus de répondre : il surveille la santé de vos machines, prépare un briefing chaque matin, vous alerte d'une anomalie et affiche les SMS/notifications de votre téléphone sur votre écran PC.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">APScheduler</span>
+              <span class="tech-pill">NotificationListenerService</span>
+              <span class="tech-pill">Prometheus & Grafana</span>
+              <span class="tech-pill">FCM Push</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Lecture et réponse aux SMS/WhatsApp depuis le PC</li>
+              <li><span class="bullet">▸</span> Routines automatisées et synthèse de début de journée</li>
+              <li><span class="bullet">▸</span> Surveillance de charge, disque et connectivité</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V6 -->
+        <div class="version-card" data-category="sense">
+          <div class="version-marker">6</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V6</span>
+                <h3 class="version-name">Regard — ORION Voit l'Écran</h3>
+              </div>
+              <span class="status-tag status-planned">Planifié</span>
+            </div>
+            <p class="version-tagline">Compréhension visuelle et OCR contextuel</p>
+            <p class="version-description">
+              Intégration de la vision par ordinateur : capture sécurisée de zones d'écran, extraction de texte sur images (OCR) et contrôle miroir de l'écran du smartphone sur le poste de travail.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">Portails XDG Linux</span>
+              <span class="tech-pill">PaddleOCR / Tesseract</span>
+              <span class="tech-pill">scrcpy integration</span>
+              <span class="tech-pill">Vision LLM</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Analyse d'un document ou d'une erreur affichée à l'écran</li>
+              <li><span class="bullet">▸</span> Fenêtre miroir fluide du smartphone sur Linux</li>
+              <li><span class="bullet">▸</span> Assistance contextuelle sur ce que vous êtes en train de lire</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V7 -->
+        <div class="version-card" data-category="future">
+          <div class="version-marker">7</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V7</span>
+                <h3 class="version-name">Maison — Pilotage de l'Environnement Physique</h3>
+              </div>
+              <span class="status-tag status-planned">Planifié</span>
+            </div>
+            <p class="version-tagline">Passerelle domotique et contrôle d'objets connectés</p>
+            <p class="version-description">
+              Connexion avec Home Assistant et les protocoles Zigbee/Matter : ORION ajuste la lumière de votre bureau quand vous travaillez, éteint les pièces inutilisées ou gère le thermostat.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">Home Assistant API</span>
+              <span class="tech-pill">Zigbee2MQTT</span>
+              <span class="tech-pill">Matter</span>
+              <span class="tech-pill">Scénarios d'ambiance</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Contrôle unifié de l'éclairage, prises et capteurs</li>
+              <li><span class="bullet">▸</span> Déclencheurs basés sur la présence des appareils</li>
+              <li><span class="bullet">▸</span> Domotique 100 % locale sans dépendance extérieure</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V8 -->
+        <div class="version-card" data-category="future">
+          <div class="version-marker">8</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V8</span>
+                <h3 class="version-name">Équipe — Plusieurs Agents Spécialisés</h3>
+              </div>
+              <span class="status-tag status-planned">Planifié</span>
+            </div>
+            <p class="version-tagline">Collaboration multi-agents et division du travail</p>
+            <p class="version-description">
+              Délégation à une escouade d'agents spécialisés : un agent documentaliste qui lit vos PDF, un agent administrateur qui prépare vos sauvegardes, et un coordinateur central qui orchestre le tout.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">LangGraph</span>
+              <span class="tech-pill">Multi-Agent Systems</span>
+              <span class="tech-pill">Message Board partagé</span>
+              <span class="tech-pill">Contrôle de consensus</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Traitement parallèle de requêtes complexes</li>
+              <li><span class="bullet">▸</span> Agents spécialisés par domaine d'expertise</li>
+              <li><span class="bullet">▸</span> Journal d'échange transparent entre agents</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- V9 -->
+        <div class="version-card" data-category="future">
+          <div class="version-marker">9</div>
+          <div class="version-card-inner">
+            <div class="version-header">
+              <div class="version-title-group">
+                <span class="version-badge">V9</span>
+                <h3 class="version-name">Jarvis — Intégration, Finition & Autonomie Encadrée</h3>
+              </div>
+              <span class="status-tag status-planned">🎯 Vision Finale</span>
+            </div>
+            <p class="version-tagline">L'aboutissement : un assistant fluide, discret et digne de science-fiction</p>
+            <p class="version-description">
+              Harmonisation complète de tous les modules : interface unifiée au design futuriste, autonomie encadrée pour anticiper vos besoins, résilience totale face aux pannes réseau et finition irréprochable.
+            </p>
+            <div class="tech-pills">
+              <span class="tech-pill">Autonomie Encadrée</span>
+              <span class="tech-pill">UX Holistique</span>
+              <span class="tech-pill">Auto-guérison</span>
+              <span class="tech-pill">Zero-Trust Ultime</span>
+            </div>
+            <ul class="version-features-list">
+              <li><span class="bullet">▸</span> Expérience utilisateur immersive et fluide</li>
+              <li><span class="bullet">▸</span> Gestion proactive des imprévus du quotidien</li>
+              <li><span class="bullet">▸</span> Souveraineté totale sur chaque octet de donnée</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bot V0.5 Live Spotlight -->
+  <section id="bot-v05" class="section">
+    <div class="container">
+      <div class="bot-spotlight">
+        <div class="bot-grid">
+          <div class="bot-info">
+            <span class="section-tag">En Production Dès Aujourd'hui</span>
+            <h3>Le Bot Telegram V0.5 en Action</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 1.05rem;">
+              Pas besoin d'attendre la V9 pour profiter d'ORION. Le bot V0.5 tourne déjà en tâche de fond sur votre PC et transforme votre messagerie Telegram en télécommande de fichiers sécurisée.
+            </p>
+            <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+              <a href="https://github.com/jean-emmvnuel/projet-orion/blob/main/Bot/bot.py" target="_blank" rel="noopener" class="btn btn-primary">
+                Consulter le Code (Bot/bot.py)
+              </a>
+              <a href="https://t.me/BotFather" target="_blank" rel="noopener" class="btn btn-secondary">
+                Créer son Jeton BotFather
+              </a>
+            </div>
+          </div>
+
+          <div class="terminal-box">
+            <div class="terminal-header">
+              <span class="t-dot t-red"></span>
+              <span class="t-dot t-yellow"></span>
+              <span class="t-dot t-green"></span>
+            </div>
+            <div class="terminal-line"><span class="t-comment"># Lancement rapide du bot V0.5</span></div>
+            <div class="terminal-line">$ <span class="t-cmd">cd Bot && source .venv/bin/activate</span></div>
+            <div class="terminal-line">$ <span class="t-cmd">python3 bot.py</span></div>
+            <div class="terminal-line"><span class="t-success">Bot démarré avec succès (polling actif)...</span></div>
+            <div class="terminal-line" style="margin-top: 14px;"><span class="t-comment"># Dans Telegram sur mobile :</span></div>
+            <div class="terminal-line">👉 /start <span class="t-comment">-> Accueil & commandes</span></div>
+            <div class="terminal-line">👉 /ls <span class="t-comment">-> Parcourt vos dossiers</span></div>
+            <div class="terminal-line">👉 /getfile contrat.pdf <span class="t-comment">-> Fichier reçu !</span></div>
+            <div class="terminal-line">📎 Envoyez une photo <span class="t-comment">-> Sauvegardée dans ~/reçus</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PWA Install Banner -->
+  <section class="container">
+    <div class="pwa-banner">
+      <div class="pwa-info">
+        <img src="assets/icon-192.png" alt="ORION Icon" class="pwa-icon">
+        <div class="pwa-text">
+          <h4>Installez ORION sur votre écran d'accueil</h4>
+          <p>Application web progressive (PWA) : accès instantané hors-ligne et expérience fluide sur mobile et bureau.</p>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-install-pwa" style="display: none;">
+        📲 Installer l'Application
+      </button>
+    </div>
+  </section>
+
+  <!-- Sécurité -->
+  <section id="securite" class="section">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Sécurité & Confidentialité</span>
+        <h2 class="section-title">Construit Dès le Premier Jour sur le Zero-Trust</h2>
+        <p class="section-description">
+          Parce qu'un assistant puissant ne doit jamais devenir une brèche de sécurité pour vos données personnelles.
+        </p>
+      </div>
+
+      <div class="pillars-grid">
+        <div class="pillar-card">
+          <div class="pillar-icon">🔒</div>
+          <h3 class="pillar-title">Confinement Strict des Chemins</h3>
+          <p class="pillar-text">
+            Chaque opération d'accès disque est bridée par un garde-fou `safe_path`. Interdiction totale des traversées relatives (`../`) et verrouillage dans les dossiers autorisés de l'utilisateur.
+          </p>
+        </div>
+
+        <div class="pillar-card">
+          <div class="pillar-icon">🔑</div>
+          <h3 class="pillar-title">Authentification Renforcée</h3>
+          <p class="pillar-text">
+            Hachage des mots de passe en Argon2id, jetons d'accès JWT limités à 15 minutes, jetons de rafraîchissement à usage unique stockés dans le Keystore Android, et validation 2FA TOTP.
+          </p>
+        </div>
+
+        <div class="pillar-card">
+          <div class="pillar-icon">🛡️</div>
+          <h3 class="pillar-title">Réseau Privé Tailscale</h3>
+          <p class="pillar-text">
+            Aucun port entrant ouvert sur votre box Internet. Toutes les communications réseau hors Telegram transitent par un tunnel WireGuard chiffré de bout en bout réservé à vos appareils.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <img src="assets/logo-dark.svg" alt="ORION" style="height: 34px;">
+          <p>
+            Assistant personnel autonome, multi-appareils et multidirectionnel. Conçu et développé par Jean Emmanuel Ahossi comme parcours d'ingénierie et outil du quotidien.
+          </p>
+        </div>
+
+        <div class="footer-col">
+          <h5>Navigation</h5>
+          <ul class="footer-links">
+            <li><a href="#vision">Vision & Philosophie</a></li>
+            <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#roadmap">Feuille de Route</a></li>
+            <li><a href="#bot-v05">Bot V0.5</a></li>
+            <li><a href="#securite">Sécurité</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h5>Ressources</h5>
+          <ul class="footer-links">
+            <li><a href="https://github.com/jean-emmvnuel/projet-orion" target="_blank" rel="noopener">Dépôt GitHub</a></li>
+            <li><a href="https://github.com/jean-emmvnuel/projet-orion/blob/main/ORION_Cahier_des_charges.md" target="_blank" rel="noopener">Cahier des charges (v1.3)</a></li>
+            <li><a href="https://github.com/jean-emmvnuel/projet-orion/blob/main/JOURNAL.md" target="_blank" rel="noopener">Journal de bord</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <span>© 2026 ORION — Jean Emmanuel Ahossi. Tous droits réservés.</span>
+        <span>Version actuelle : v0.5 Messager</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Back to top button -->
+  <button class="back-to-top" aria-label="Retour en haut">↑</button>
+
+</body>
+</html>

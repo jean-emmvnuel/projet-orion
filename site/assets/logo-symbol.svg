@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="ORION Symbol">
+  <title>ORION Symbol</title>
+  <style>
+    .orion-arc { stroke: #1a1919; }
+    .orion-node { fill: #9810e6; }
+    @media (prefers-color-scheme: dark) {
+      .orion-arc { stroke: #f5f5f7; }
+      .orion-node { fill: #b15cf0; }
+    }
+  </style>
+  <path class="orion-arc" d="M67.19 67.19 A86 86 0 0 1 213.67 135.50" fill="none" stroke-width="24"/>
+  <circle class="orion-node" cx="67.19" cy="67.19" r="25"/>
+  <path class="orion-arc" d="M188.81 188.81 A86 86 0 0 1 42.33 120.50" fill="none" stroke-width="24"/>
+  <circle class="orion-node" cx="188.81" cy="188.81" r="25"/>
+</svg>
