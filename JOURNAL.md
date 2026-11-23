@@ -10,11 +10,22 @@
 ## 📅 23 novembre 2026 — Clôture du Jalon V0.5 (Messager) & Préparation V1
 
 ### 1. Ce qui a été fait
-- **Finalisation complète des commandes V0.5 :**
-  - `/zip <dossier>` : compression asynchrone non-bloquante avec exclusion intelligente (`.git`, caches, `node_modules`, venvs) et vérification du seuil Telegram (50 Mo).
-  - Bouton direct **« 📦 Zipper ce dossier »** intégré dans la pagination et l'explorateur interactif `/ls`.
-  - `/screenshot` autonome et immédiat : suppression de toute boîte de dialogue locale bloquante pour respecter la philosophie d'accès distant 100% autonome. Prise en charge native de GNOME Wayland via `gdbus` / `gnome-screenshot` et injection automatique de l'environnement de session (`DBUS_SESSION_BUS_ADDRESS`, `WAYLAND_DISPLAY`).
-  - `/status` enrichi avec calcul d'uptime, mémoire, CPU et disque, avec fallback natif `/proc` en l'absence de `psutil`.
+- **Refactoring modulaire & Nettoyage du code indésirable :**
+  - Découpage du fichier monolithique `bot.py` (1010 lignes) en une architecture modulaire et maintenable :
+    - `config.py` : centralisation de la configuration, dossiers racines et seuils.
+    - `security.py` : confinement `safe_path`, filtrage d'accès et cache LRU `PathCache` en O(1).
+    - `services/` : logique système (`system.py`), capture Wayland sans pop-up (`screenshot.py`) et manipulation optimisée de fichiers (`files.py`).
+    - `handlers/` : dispatching clair des commandes (`common.py`, `files.py`, `system.py`).
+    - `bot.py` : orchestrateur allégé de moins de 100 lignes.
+  - Élimination du code mort et des outils incompatibles avec Wayland (`gnome-screenshot`, `flameshot`).
+- **Optimisations algorithmiques (faible coût de calcul) :**
+  - `/find` : passage à `os.scandir` avec profondeur bornée (`MAX_FIND_DEPTH = 4`) et arrêt anticipé (`MAX_FIND_RESULTS = 15`), évitant les scans récursifs infinis et l'épuisement CPU/disque.
+  - `/zip` : pré-contrôle en O(N) de la taille brute (refus immédiat si > 100 Mo) évitant de compresser inutilement des gigaoctets de données, compression avec niveau rapide (`compresslevel=1`).
+  - `/status` : lecture directe en O(1) depuis `sysfs` et `/proc`, ajout du **pourcentage et état de batterie**.
+- **Nouvelles fonctionnalités V0.5 :**
+  - `/shot` uniforme : commande unique et explicite pour la capture d'écran distante immédiate.
+  - `/lock` : verrouillage instantané de la session du PC à distance via `loginctl` / D-Bus.
+  - Interface `/help` & `/start` stylée et ergonomique avec clavier de boutons d'action rapide.
 - **Packaging & Automatisation du service d'arrière-plan :**
   - Création de l'unité systemd utilisateur `Bot/orion-bot.service` pour exécution continue en tâche de fond avec accès au bus D-Bus utilisateur.
   - Rédaction du guide d'exploitation complet [`Bot/README.md`](Bot/README.md).
