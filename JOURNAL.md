@@ -7,6 +7,35 @@
 
 ---
 
+## 📅 23 novembre 2026 — Clôture du Jalon V0.5 (Messager) & Préparation V1
+
+### 1. Ce qui a été fait
+- **Finalisation complète des commandes V0.5 :**
+  - `/zip <dossier>` : compression asynchrone non-bloquante avec exclusion intelligente (`.git`, caches, `node_modules`, venvs) et vérification du seuil Telegram (50 Mo).
+  - Bouton direct **« 📦 Zipper ce dossier »** intégré dans la pagination et l'explorateur interactif `/ls`.
+  - `/screenshot` autonome et immédiat : suppression de toute boîte de dialogue locale bloquante pour respecter la philosophie d'accès distant 100% autonome. Prise en charge native de GNOME Wayland via `gdbus` / `gnome-screenshot` et injection automatique de l'environnement de session (`DBUS_SESSION_BUS_ADDRESS`, `WAYLAND_DISPLAY`).
+  - `/status` enrichi avec calcul d'uptime, mémoire, CPU et disque, avec fallback natif `/proc` en l'absence de `psutil`.
+- **Packaging & Automatisation du service d'arrière-plan :**
+  - Création de l'unité systemd utilisateur `Bot/orion-bot.service` pour exécution continue en tâche de fond avec accès au bus D-Bus utilisateur.
+  - Rédaction du guide d'exploitation complet [`Bot/README.md`](Bot/README.md).
+- **Site vitrine PWA ORION :**
+  - Déploiement d'une landing page PWA responsive (`site/`) avec animations GSAP vivantes style Claude Code (titres en reveal mot à mot, magnetic buttons, parallax de particules stellaires, terminal interactif, timeline interactive V0→V9).
+  - Intégration du favicon et icones PWA générés depuis le **Concept 1 Logo B (« Le O réciproque »)**.
+
+### 2. Ce qui a été appris
+- **Wayland vs X11 pour les captures d'écran :** Sous Ubuntu avec Mutter/GNOME Shell, les outils traditionnels comme `grim` (spécifique à wlroots) ou `import` échouent. L'appel D-Bus `org.gnome.Shell.Screenshot` ou `gnome-screenshot -f` avec transmission des descripteurs de session D-Bus constitue la seule méthode fiable sans privilèges root.
+- **Philosophie d'un assistant distant :** Aucune interaction physique sur la machine cible ne doit être requise lors d'une commande déclenchée à distance (suppression des invites de validation locale).
+- **Compression asynchrone dans Telegram :** Utiliser `asyncio.to_thread` pour les opérations I/O lourdes (création d'archive zip) est indispensable pour ne pas bloquer la boucle d'événements du bot.
+
+### 3. Prochaines étapes (Cap sur la V1 — Pont)
+- Lancement de la **V1 — Pont (téléphone ⇄ PC)** :
+  - Initialiser le package `core/src/orion_core/` (FastAPI, SQLAlchemy/PostgreSQL, Redis).
+  - Configurer l'authentification propriétaire (F001 : Argon2id, JWT, TOTP).
+  - Définir le protocole d'appairage par QR code (F002) et le bus MQTT Mosquitto.
+  - Développer l'agent local `agent/src/orion_agent/`.
+
+---
+
 ## 📅 22 novembre 2026 — Jalon V0 (Atelier) & V0.5 (Messager)
 
 ### 1. Ce qui a été fait

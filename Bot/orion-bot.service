@@ -1,0 +1,24 @@
+[Unit]
+Description=ORION Telegram Bot (V0.5 - Messager)
+Documentation=https://github.com/jean-emmvnuel/projet-orion
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Desktop/ORION/Bot
+ExecStart=%h/Desktop/ORION/Bot/.venv/bin/python3 %h/Desktop/ORION/Bot/bot.py
+Restart=always
+RestartSec=10
+
+# Logs non mis en mémoire tampon
+Environment=PYTHONUNBUFFERED=1
+
+# Variables de session utilisateur pour autoriser la capture d'écran sous GNOME Wayland & X11
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=default.target
