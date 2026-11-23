@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import shutil
 import hashlib
@@ -501,127 +502,168 @@ def get_desktop_env() -> dict:
     return env
 
 
-def capture_ecran_locale() -> Path:
+def _capture_portal(env: dict, target_dest: Path) -> bool:
     """
-    Capture l'écran du PC sous Linux de façon 100% silencieuse et automatique :
-    1. gnome-screenshot (CLI natif sous Ubuntu / GNOME)
-    2. GNOME Shell D-Bus (sans dialogue)
-    3. grim (Wayland wlroots)
-    4. Flameshot (CLI sans GUI)
-    5. Pillow ImageGrab (X11)
+    Capture d'écran via XDG Desktop Portal (méthode native officielle Wayland / GNOME Shell).
+    Exécute la capture avec interactive=False : aucun pop-up, aucun clic de confirmation requis.
+    Le fichier généré est immédiatement déplacé vers target_dest pour être confiné et nettoyé.
     """
-    fd, tmp_file = tempfile.mkstemp(suffix=".png", prefix="orion_screen_")
-    os.close(fd)
-    tmp_path = Path(tmp_file)
-    env = get_desktop_env()
-    erreurs = []
+    script = """
+import sys
+from urllib.parse import unquote, urlparse
+from pathlib import Path
 
-    # 1. gnome-screenshot en ligne de commande directe (sans pop-up)
+try:
+    import dbus
+    import dbus.mainloop.glib
+    from gi.repository import GLib
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    loop = GLib.MainLoop()
+    result_path = None
+
+    def on_response(response, results, object_path):
+        global result_path
+        if response == 0 and 'uri' in results:
+            parsed = urlparse(str(results['uri']))
+            result_path = unquote(parsed.path)
+        loop.quit()
+
+    bus.add_signal_receiver(
+        on_response,
+        signal_name='Response',
+        dbus_interface='org.freedesktop.portal.Request',
+        bus_name='org.freedesktop.portal.Desktop',
+        path_keyword='object_path'
+    )
+
+    proxy = bus.get_object('org.freedesktop.portal.Desktop', '/org/freedesktop/portal/desktop')
+    iface = dbus.Interface(proxy, dbus_interface='org.freedesktop.portal.Screenshot')
+    req = iface.Screenshot('', {'interactive': False})
+
+    GLib.timeout_add_seconds(6, loop.quit)
+    loop.run()
+
+    if result_path and Path(result_path).exists() and Path(result_path).stat().st_size > 0:
+        print(result_path)
+        sys.exit(0)
+    sys.exit(1)
+except Exception:
+    sys.exit(2)
+"""
+    python_bin = "/usr/bin/python3" if os.path.exists("/usr/bin/python3") else sys.executable
     try:
         res = subprocess.run(
-            ["gnome-screenshot", "-f", str(tmp_path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            timeout=8,
-            env=env,
-        )
-        if res.returncode == 0 and tmp_path.exists() and tmp_path.stat().st_size > 0:
-            return tmp_path
-        if res.stderr:
-            erreurs.append(f"gnome-screenshot: {res.stderr.decode(errors='ignore').strip()[:60]}")
-    except Exception as e:
-        erreurs.append(f"gnome-screenshot: {e}")
-
-    # 2. GNOME Shell D-Bus (API interne de GNOME Shell, silencieuse)
-    try:
-        res = subprocess.run(
-            [
-                "gdbus",
-                "call",
-                "--session",
-                "--dest",
-                "org.gnome.Shell.Screenshot",
-                "--object-path",
-                "/org/gnome/Shell/Screenshot",
-                "--method",
-                "org.gnome.Shell.Screenshot.Screenshot",
-                "false",
-                "false",
-                str(tmp_path),
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            [python_bin, "-c", script],
+            capture_output=True,
             text=True,
             timeout=8,
             env=env,
         )
-        if res.returncode == 0 and tmp_path.exists() and tmp_path.stat().st_size > 0:
-            return tmp_path
-        if res.stderr:
-            erreurs.append(f"GNOME D-Bus: {res.stderr.strip()[:60]}")
-    except Exception as e:
-        erreurs.append(f"GNOME D-Bus: {e}")
+        if res.returncode == 0 and res.stdout.strip():
+            portal_file = Path(res.stdout.strip())
+            if portal_file.exists() and portal_file.stat().st_size > 0:
+                shutil.move(str(portal_file), str(target_dest))
+                return True
+    except Exception:
+        pass
+    return False
 
-    # 3. grim (compositeurs Wayland comme Sway, Hyprland)
+
+def capture_ecran_locale() -> Path:
+    """
+    Capture l'écran du PC sous Linux de façon 100% silencieuse, autonome et sans pop-up :
+    1. XDG Desktop Portal (Ubuntu GNOME Wayland moderne sans pop-up avec interactive=False)
+    2. grim (Wayland Sway / Hyprland)
+    3. flameshot (CLI)
+    4. scrot / import (X11)
+    5. Pillow ImageGrab (X11)
+
+    Le fichier est confiné dans le dossier autorisé INBOX et sera supprimé dès son envoi.
+    """
+    try:
+        INBOX.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+
+    temp_target = INBOX / f".tmp_screen_{int(time.time() * 1000)}.png"
+    env = get_desktop_env()
+    erreurs = []
+
+    # 1. XDG Desktop Portal (Méthode officielle Wayland / GNOME Shell sans pop-up)
+    try:
+        if _capture_portal(env, temp_target):
+            if temp_target.exists() and temp_target.stat().st_size > 0:
+                return temp_target
+        erreurs.append("XDG Portal: pas de réponse ou accès refusé")
+    except Exception as e:
+        erreurs.append(f"XDG Portal: {e}")
+
+    # 2. grim (compositeurs Wayland Sway, Hyprland...)
     try:
         res = subprocess.run(
-            ["grim", str(tmp_path)],
+            ["grim", str(temp_target)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             timeout=5,
             env=env,
         )
-        if res.returncode == 0 and tmp_path.exists() and tmp_path.stat().st_size > 0:
-            return tmp_path
+        if res.returncode == 0 and temp_target.exists() and temp_target.stat().st_size > 0:
+            return temp_target
         if res.stderr:
             erreurs.append(f"grim: {res.stderr.decode(errors='ignore').strip()[:60]}")
     except Exception as e:
         erreurs.append(f"grim: {e}")
 
-    # 4. Flameshot en mode silencieux direct
+    # 3. Flameshot CLI
     try:
         res = subprocess.run(
-            ["flameshot", "full", "-p", str(tmp_path)],
+            ["flameshot", "full", "-p", str(temp_target)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-            timeout=8,
+            timeout=5,
             env=env,
         )
         time.sleep(0.5)
-        if tmp_path.exists() and tmp_path.stat().st_size > 0:
-            return tmp_path
+        if temp_target.exists() and temp_target.stat().st_size > 0:
+            return temp_target
         if res.stderr:
             erreurs.append(f"flameshot: {res.stderr.decode(errors='ignore').strip()[:60]}")
     except Exception as e:
         erreurs.append(f"flameshot: {e}")
 
-    # 5. Fallbacks X11 (scrot, import, ImageGrab)
-    for cmd in [["scrot", str(tmp_path)], ["import", "-window", "root", str(tmp_path)]]:
+    # 4. Fallbacks X11 (scrot, import)
+    for cmd in [["scrot", str(temp_target)], ["import", "-window", "root", str(temp_target)]]:
         try:
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, env=env)
-            if tmp_path.exists() and tmp_path.stat().st_size > 0:
-                return tmp_path
+            if temp_target.exists() and temp_target.stat().st_size > 0:
+                return temp_target
         except Exception:
             continue
 
+    # 5. Fallback Pillow ImageGrab
     if ImageGrab:
         try:
             img = ImageGrab.grab()
-            img.save(tmp_path, "PNG")
-            if tmp_path.exists() and tmp_path.stat().st_size > 0:
-                return tmp_path
+            img.save(temp_target, "PNG")
+            if temp_target.exists() and temp_target.stat().st_size > 0:
+                return temp_target
         except Exception as e:
             erreurs.append(f"Pillow ImageGrab: {e}")
 
-    if tmp_path.exists():
-        tmp_path.unlink()
+    if temp_target.exists():
+        try:
+            temp_target.unlink()
+        except OSError:
+            pass
 
     detail_err = " ; ".join(erreurs[:2]) if erreurs else "session graphique introuvable"
     raise RuntimeError(f"Échec de la capture silencieuse ({detail_err}).")
 
 
 async def screenshot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Prend instantanément une capture d'écran du PC et l'envoie sur Telegram sans aucune confirmation."""
+    """Prend instantanément une capture d'écran du PC et l'envoie sur Telegram sans confirmation ni conservation sur disque."""
     if not is_authorized(update.effective_user.id):
         return
 
@@ -650,8 +692,12 @@ async def screenshot_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         print(f"⚠️ Erreur capture d'écran : {e}")
         await msg_status.edit_text(f"❌ Échec de la capture d'écran :\n{e}")
     finally:
+        # IMPORTANT : Suppression immédiate pour ne laisser aucune trace de la capture sur le PC
         if screen_path and screen_path.exists():
-            screen_path.unlink()
+            try:
+                screen_path.unlink()
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------
