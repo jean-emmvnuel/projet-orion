@@ -149,7 +149,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🔹 `/get <chemin>` — Télécharger un fichier spécifique (< 50 Mo)\n"
         "🔹 `/zip <dossier>` — Compresser un dossier en zip et l'envoyer (< 50 Mo)\n"
         "🔹 `/status` — État du PC (CPU, RAM, Disque, Durée de démarrage)\n"
-        "🔹 `/screenshot` ou `/shot` — Capture d'écran distante (avec confirmation préalable)\n\n"
+        "🔹 `/screenshot` ou `/shot` — Capture d'écran distante immédiate de votre PC\n\n"
         f"📎 **Envoi de fichiers :**\n"
         f"Tout document ou photo envoyé dans cette discussion est automatiquement enregistré dans `{INBOX}`."
     )
@@ -474,25 +474,8 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # ---------------------------------------------------------------------------
-# Commande /screenshot : Capture d'écran distante avec confirmation
+# Commande /screenshot : Capture d'écran distante immédiate
 # ---------------------------------------------------------------------------
-async def screenshot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_authorized(update.effective_user.id):
-        return
-
-    clavier = [
-        [
-            InlineKeyboardButton("📸 Confirmer la capture", callback_data="screen:snap"),
-            InlineKeyboardButton("❌ Annuler", callback_data="screen:cancel"),
-        ]
-    ]
-    texte = (
-        "📸 **Capture d'écran distante**\n\n"
-        "Confirmez-vous la prise de capture d'écran de l'affichage de votre PC ?"
-    )
-    await update.message.reply_text(texte, reply_markup=InlineKeyboardMarkup(clavier), parse_mode="Markdown")
-
-
 def get_desktop_env() -> dict:
     """Prépare un dictionnaire d'environnement enrichi pour accéder à la session graphique active."""
     env = os.environ.copy()
@@ -520,12 +503,12 @@ def get_desktop_env() -> dict:
 
 def capture_ecran_locale() -> Path:
     """
-    Capture l'écran du PC sous Linux avec détection multi-méthodes :
-    1. GNOME Shell D-Bus (natif Ubuntu / GNOME Wayland & X11)
-    2. Flameshot (CLI Wayland / X11)
-    3. grim (standard Wayland wlroots)
-    4. gnome-screenshot / scrot / import
-    5. Pillow ImageGrab (X11 fallback)
+    Capture l'écran du PC sous Linux de façon 100% silencieuse et automatique :
+    1. gnome-screenshot (CLI natif sous Ubuntu / GNOME)
+    2. GNOME Shell D-Bus (sans dialogue)
+    3. grim (Wayland wlroots)
+    4. Flameshot (CLI sans GUI)
+    5. Pillow ImageGrab (X11)
     """
     fd, tmp_file = tempfile.mkstemp(suffix=".png", prefix="orion_screen_")
     os.close(fd)
@@ -533,7 +516,23 @@ def capture_ecran_locale() -> Path:
     env = get_desktop_env()
     erreurs = []
 
-    # 1. GNOME Shell D-Bus (Inclus par défaut sur Ubuntu / GNOME, fonctionne en natif Wayland)
+    # 1. gnome-screenshot en ligne de commande directe (sans pop-up)
+    try:
+        res = subprocess.run(
+            ["gnome-screenshot", "-f", str(tmp_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=8,
+            env=env,
+        )
+        if res.returncode == 0 and tmp_path.exists() and tmp_path.stat().st_size > 0:
+            return tmp_path
+        if res.stderr:
+            erreurs.append(f"gnome-screenshot: {res.stderr.decode(errors='ignore').strip()[:60]}")
+    except Exception as e:
+        erreurs.append(f"gnome-screenshot: {e}")
+
+    # 2. GNOME Shell D-Bus (API interne de GNOME Shell, silencieuse)
     try:
         res = subprocess.run(
             [
@@ -563,7 +562,23 @@ def capture_ecran_locale() -> Path:
     except Exception as e:
         erreurs.append(f"GNOME D-Bus: {e}")
 
-    # 2. Flameshot (installé sur Ubuntu)
+    # 3. grim (compositeurs Wayland comme Sway, Hyprland)
+    try:
+        res = subprocess.run(
+            ["grim", str(tmp_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            timeout=5,
+            env=env,
+        )
+        if res.returncode == 0 and tmp_path.exists() and tmp_path.stat().st_size > 0:
+            return tmp_path
+        if res.stderr:
+            erreurs.append(f"grim: {res.stderr.decode(errors='ignore').strip()[:60]}")
+    except Exception as e:
+        erreurs.append(f"grim: {e}")
+
+    # 4. Flameshot en mode silencieux direct
     try:
         res = subprocess.run(
             ["flameshot", "full", "-p", str(tmp_path)],
@@ -575,31 +590,13 @@ def capture_ecran_locale() -> Path:
         time.sleep(0.5)
         if tmp_path.exists() and tmp_path.stat().st_size > 0:
             return tmp_path
+        if res.stderr:
+            erreurs.append(f"flameshot: {res.stderr.decode(errors='ignore').strip()[:60]}")
     except Exception as e:
-        erreurs.append(f"Flameshot: {e}")
+        erreurs.append(f"flameshot: {e}")
 
-    # 3. grim (standard Wayland Sway / Hyprland)
-    try:
-        subprocess.run(
-            ["grim", str(tmp_path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=5,
-            env=env,
-        )
-        if tmp_path.exists() and tmp_path.stat().st_size > 0:
-            return tmp_path
-    except Exception as e:
-        erreurs.append(f"grim: {e}")
-
-    # 4. Utilitaires X11 / GNOME classiques
-    commandes_alternatives = [
-        ["gnome-screenshot", "-f", str(tmp_path)],
-        ["scrot", str(tmp_path)],
-        ["import", "-window", "root", str(tmp_path)],
-        ["spectacle", "-b", "-n", "-o", str(tmp_path)],
-    ]
-    for cmd in commandes_alternatives:
+    # 5. Fallbacks X11 (scrot, import, ImageGrab)
+    for cmd in [["scrot", str(tmp_path)], ["import", "-window", "root", str(tmp_path)]]:
         try:
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, env=env)
             if tmp_path.exists() and tmp_path.stat().st_size > 0:
@@ -607,7 +604,6 @@ def capture_ecran_locale() -> Path:
         except Exception:
             continue
 
-    # 5. Pillow ImageGrab (si disponible sous X11)
     if ImageGrab:
         try:
             img = ImageGrab.grab()
@@ -621,10 +617,41 @@ def capture_ecran_locale() -> Path:
         tmp_path.unlink()
 
     detail_err = " ; ".join(erreurs[:2]) if erreurs else "session graphique introuvable"
-    raise RuntimeError(
-        f"Impossible de capturer l'écran ({detail_err}).\n"
-        "💡 Astuce : Installez `gnome-screenshot` via `sudo apt install gnome-screenshot` pour une compatibilité maximale."
-    )
+    raise RuntimeError(f"Échec de la capture silencieuse ({detail_err}).")
+
+
+async def screenshot_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Prend instantanément une capture d'écran du PC et l'envoie sur Telegram sans aucune confirmation."""
+    if not is_authorized(update.effective_user.id):
+        return
+
+    msg_status = await update.message.reply_text("⏳ Prise de capture d'écran en cours...", parse_mode="Markdown")
+    screen_path = None
+    try:
+        # Exécution dans un thread séparé pour ne jamais bloquer la boucle asynchrone
+        screen_path = await asyncio.to_thread(capture_ecran_locale)
+        try:
+            with open(screen_path, "rb") as f:
+                await update.message.reply_photo(
+                    photo=f,
+                    caption=f"📸 **Capture d'écran PC** ({datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')})",
+                    parse_mode="Markdown",
+                )
+        except Exception:
+            with open(screen_path, "rb") as f:
+                await update.message.reply_document(
+                    document=f,
+                    filename="screenshot.png",
+                    caption=f"📸 **Capture d'écran PC** ({datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')})",
+                    parse_mode="Markdown",
+                )
+        await msg_status.delete()
+    except Exception as e:
+        print(f"⚠️ Erreur capture d'écran : {e}")
+        await msg_status.edit_text(f"❌ Échec de la capture d'écran :\n{e}")
+    finally:
+        if screen_path and screen_path.exists():
+            screen_path.unlink()
 
 
 # ---------------------------------------------------------------------------
@@ -669,40 +696,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = query.data
     action, _, extra = data.partition(":")
 
-    if action == "screen":
-        if extra == "cancel":
-            await query.edit_message_text("❌ Capture d'écran annulée.")
-        elif extra == "snap":
-            await query.edit_message_text("⏳ Capture en cours...")
-            screen_path = None
-            try:
-                screen_path = capture_ecran_locale()
-                # Tenter l'envoi en photo, puis en document si photo échoue
-                try:
-                    with open(screen_path, "rb") as f:
-                        await query.message.reply_photo(
-                            photo=f,
-                            caption=f"📸 **Capture d'écran PC** ({datetime.datetime.now().strftime('%H:%M:%S')})",
-                            parse_mode="Markdown",
-                        )
-                except Exception:
-                    with open(screen_path, "rb") as f:
-                        await query.message.reply_document(
-                            document=f,
-                            filename="screenshot.png",
-                            caption=f"📸 **Capture d'écran PC** ({datetime.datetime.now().strftime('%H:%M:%S')})",
-                            parse_mode="Markdown",
-                        )
-                await query.edit_message_text("✅ Capture d'écran envoyée !")
-            except Exception as e:
-                print(f"⚠️ Erreur capture d'écran : {e}")
-                await query.edit_message_text(f"❌ Échec de la capture d'écran :\n{e}")
-            finally:
-                if screen_path and screen_path.exists():
-                    screen_path.unlink()
-        return
-
-    # Actions liées à la navigation de fichiers (nav / get)
+    # Actions liées à la navigation de fichiers (nav / get / zip)
     path = path_cache.get_path(extra)
     if not path:
         await query.edit_message_text("⚠️ Session expirée. Veuillez relancer la commande /ls ou /find.")

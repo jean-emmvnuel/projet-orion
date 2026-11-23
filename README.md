@@ -81,7 +81,7 @@ Situé dans le dossier `Bot/`, ce module offre une première victoire concrète 
 - 🔹 **/get `<chemin>`** ou **clic sur un fichier** : Téléchargement direct d'un fichier du PC vers Telegram (< 50 Mo).
 - 🔹 **/zip `<dossier>`** : Compression asynchrone d'un dossier en archive `.zip` et envoi direct dans la discussion.
 - 🔹 **/status** : Télémétrie en direct du PC (charge CPU, utilisation RAM, espace disque et durée d'activité Uptime).
-- 🔹 **/screenshot** (ou **/shot**) : Prise de capture d'écran distante de votre PC avec confirmation par bouton (support natif Wayland GNOME, Flameshot et X11).
+- 🔹 **/screenshot** (ou **/shot**) : Prise de capture d'écran distante immédiate de votre PC (100% autonome sans confirmation physique requise sur le PC).
 - 🔹 **Réception automatique de documents et photos** : Tout fichier envoyé dans la conversation est automatiquement sauvegardé sur le PC dans `~/Downloads/ORION` (ou `~/Téléchargements/ORION`).
 - 🛡️ **Sécurité des chemins & accès** : Confinement strict sous le dossier utilisateur personnel (`safe_path`), gestion de la limite Telegram (50 Mo), et restriction optionnelle par `OWNER_ID`.
 
