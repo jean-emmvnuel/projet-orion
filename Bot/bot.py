@@ -127,34 +127,56 @@ path_cache = PathCache()
 # ---------------------------------------------------------------------------
 # Commandes : Accueil & Aide
 # ---------------------------------------------------------------------------
+def get_help_keyboard() -> InlineKeyboardMarkup:
+    """Construit un clavier d'actions rapides moderne et ergonomique."""
+    clavier = [
+        [
+            InlineKeyboardButton("📊 État du PC", callback_data="cmd:status"),
+            InlineKeyboardButton("📸 Capture d'écran", callback_data="cmd:shot"),
+        ],
+        [
+            InlineKeyboardButton("📁 Parcourir (~/)", callback_data="cmd:ls"),
+            InlineKeyboardButton("🔒 Verrouiller le PC", callback_data="cmd:lock"),
+        ],
+    ]
+    return InlineKeyboardMarkup(clavier)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_authorized(update.effective_user.id):
         return
 
     texte = (
-        "👋 **Bonjour ! Je suis ORION (V0.5 Messager)**\n\n"
-        "Votre assistant personnel pour explorer, piloter et transférer vos fichiers à distance.\n\n"
-        "Tapez /help pour consulter toutes les commandes disponibles ou /ls pour explorer vos fichiers."
+        "✨ **ORION — Centre de Contrôle (V0.5 Messager)** ✨\n\n"
+        "Votre passerelle personnelle sécurisée Téléphone ⇄ PC.\n"
+        "Pilotez votre ordinateur, parcourez vos fichiers et surveillez vos ressources depuis n'importe où.\n\n"
+        "👇 _Sélectionnez une action rapide ou tapez /help :_"
     )
-    await update.message.reply_text(texte, parse_mode="Markdown")
+    await update.message.reply_text(texte, reply_markup=get_help_keyboard(), parse_mode="Markdown")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_authorized(update.effective_user.id):
         return
 
+    msg = update.effective_message
     texte = (
-        "📋 **Commandes ORION V0.5 disponibles :**\n\n"
-        "🔹 `/ls [dossier]` — Explorer les dossiers avec des boutons interactifs\n"
-        "🔹 `/find <motif>` — Rechercher rapidement un fichier par son nom\n"
-        "🔹 `/get <chemin>` — Télécharger un fichier spécifique (< 50 Mo)\n"
-        "🔹 `/zip <dossier>` — Compresser un dossier en zip et l'envoyer (< 50 Mo)\n"
-        "🔹 `/status` — État du PC (CPU, RAM, Disque, Durée de démarrage)\n"
-        "🔹 `/screenshot` ou `/shot` — Capture d'écran distante immédiate de votre PC\n\n"
-        f"📎 **Envoi de fichiers :**\n"
-        f"Tout document ou photo envoyé dans cette discussion est automatiquement enregistré dans `{INBOX}`."
+        "🌌 **ORION — Centre de Contrôle (V0.5)**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "🗂️ **Gestion des fichiers :**\n"
+        "├ `/ls [dossier]` ➔ Explorateur interactif\n"
+        "├ `/find <nom>`   ➔ Recherche rapide récursive\n"
+        "├ `/get <chemin>` ➔ Télécharger un fichier (< 50 Mo)\n"
+        "└ `/zip <dossier>` ➔ Compresser et envoyer un dossier\n\n"
+        "💻 **Pilotage & Sécurité :**\n"
+        "├ `/status` ➔ Métriques (CPU, RAM, Disque, 🔋 Batterie, Uptime)\n"
+        "├ `/shot`   ➔ Capture d'écran instantanée (silencieuse)\n"
+        "└ `/lock`   ➔ Verrouiller immédiatement la session du PC\n\n"
+        "📥 **Réception automatique :**\n"
+        f"Envoyez n'importe quel fichier ou photo : il sera automatiquement sauvegardé dans `{INBOX.name}` sur le PC.\n\n"
+        "⚡ _Boutons d'accès direct :_"
     )
-    await update.message.reply_text(texte, parse_mode="Markdown")
+    await msg.reply_text(texte, reply_markup=get_help_keyboard(), parse_mode="Markdown")
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +432,52 @@ async def zip_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 # ---------------------------------------------------------------------------
 # Commande /status : Télémétrie et état du PC
 # ---------------------------------------------------------------------------
+def get_battery_info() -> str | None:
+    """Récupère l'état et le pourcentage de la batterie (natif /sys ou psutil)."""
+    # 1. Tentative psutil
+    if psutil and hasattr(psutil, "sensors_battery"):
+        try:
+            bat = psutil.sensors_battery()
+            if bat:
+                pct = int(bat.percent)
+                charge = " ⚡" if bat.power_plugged else " 🔋"
+                status = "En charge" if bat.power_plugged else "Sur batterie"
+                return f"`{pct}%` ({status}{charge})"
+        except Exception:
+            pass
+
+    # 2. Lecture native Linux /sys/class/power_supply/BAT*
+    try:
+        import glob
+        bats = glob.glob("/sys/class/power_supply/BAT*")
+        if bats:
+            bat_dir = bats[0]
+            cap_file = os.path.join(bat_dir, "capacity")
+            if os.path.exists(cap_file):
+                with open(cap_file, "r") as f:
+                    pct = f.read().strip()
+                status_raw = ""
+                status_file = os.path.join(bat_dir, "status")
+                if os.path.exists(status_file):
+                    with open(status_file, "r") as f:
+                        status_raw = f.read().strip().lower()
+
+                if "charging" in status_raw:
+                    etat = "En charge ⚡"
+                elif "full" in status_raw:
+                    etat = "Pleine 🟢"
+                elif "discharging" in status_raw:
+                    etat = "Sur batterie 🔋"
+                else:
+                    etat = status_raw.capitalize() if status_raw else "Connectée"
+
+                return f"`{pct}%` ({etat})"
+    except Exception:
+        pass
+
+    return None
+
+
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_authorized(update.effective_user.id):
         return
@@ -462,20 +530,28 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     disk_free = disk.free / (1024**3)
     disk_pct = int((disk.total - disk.free) / disk.total * 100)
 
+    # Batterie
+    bat_str = get_battery_info()
+    bat_ligne = f"🔋 **Batterie :** {bat_str}\n" if bat_str else ""
+
     texte = (
-        "📊 **État du système — ORION PC**\n\n"
+        "📊 **État du système — ORION PC**\n"
+        "────────────────────────\n"
         f"⚡ **CPU :** {cpu_str}\n"
         f"🧠 **RAM :** {ram_str}\n"
-        f"💾 **Disque :** `{disk_used:.1f} / {disk_total:.1f} Go` (`{disk_pct}%` - Libre : `{disk_free:.1f} Go`)\n"
+        f"💾 **Disque :** `{disk_used:.1f} / {disk_total:.1f} Go` (`{disk_pct}%` — Libre : `{disk_free:.1f} Go`)\n"
+        f"{bat_ligne}"
         f"⏱️ **Actif depuis :** `{uptime_str}`\n"
+        "────────────────────────\n"
         f"📁 **Racine autorisée :** `{RACINE}`\n"
         f"📥 **Boîte de réception :** `{INBOX}`"
     )
-    await update.message.reply_text(texte, parse_mode="Markdown")
+    msg = update.effective_message
+    await msg.reply_text(texte, parse_mode="Markdown")
 
 
 # ---------------------------------------------------------------------------
-# Commande /screenshot : Capture d'écran distante immédiate
+# Commande /shot : Capture d'écran distante immédiate
 # ---------------------------------------------------------------------------
 def get_desktop_env() -> dict:
     """Prépare un dictionnaire d'environnement enrichi pour accéder à la session graphique active."""
@@ -701,6 +777,58 @@ async def screenshot_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 # ---------------------------------------------------------------------------
+# Commande /lock : Verrouillage distant immédiat de la session
+# ---------------------------------------------------------------------------
+def verrouiller_session() -> bool:
+    """Verrouille la session du PC de manière silencieuse et immédiate."""
+    env = get_desktop_env()
+    # Méthodes triées par fiabilité sous GNOME Wayland / X11
+    methodes = [
+        ["loginctl", "lock-session"],
+        ["gdbus", "call", "--session", "--dest", "org.gnome.ScreenSaver",
+         "--object-path", "/org/gnome/ScreenSaver",
+         "--method", "org.gnome.ScreenSaver.Lock"],
+        ["xdg-screensaver", "lock"],
+        ["dbus-send", "--type=method_call", "--dest=org.gnome.ScreenSaver",
+         "/org/gnome/ScreenSaver", "org.gnome.ScreenSaver.Lock"],
+    ]
+    for cmd in methodes:
+        try:
+            res = subprocess.run(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+                env=env,
+            )
+            if res.returncode == 0:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+async def lock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Verrouille instantanément la session du PC à distance."""
+    if not is_authorized(update.effective_user.id):
+        return
+
+    msg = await update.message.reply_text("🔒 Verrouillage de la session en cours...", parse_mode="Markdown")
+    try:
+        ok = await asyncio.to_thread(verrouiller_session)
+        if ok:
+            await msg.edit_text(
+                f"🔒 **Session verrouillée avec succès.**\n"
+                f"_{datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}_",
+                parse_mode="Markdown",
+            )
+        else:
+            await msg.edit_text("❌ Impossible de verrouiller la session. Aucun outil compatible trouvé.")
+    except Exception as e:
+        await msg.edit_text(f"❌ Erreur lors du verrouillage :\n{e}")
+
+
+# ---------------------------------------------------------------------------
 # Réception de documents ou photos envoyés par l'utilisateur
 # ---------------------------------------------------------------------------
 async def receive_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -741,6 +869,30 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     data = query.data
     action, _, extra = data.partition(":")
+
+    # Actions rapides depuis le clavier du /help et /start
+    if action == "cmd":
+        if extra == "status":
+            await status_command(update, context)
+        elif extra == "shot":
+            await screenshot_command(update, context)
+        elif extra == "ls":
+            await show_directory(query, RACINE)
+        elif extra == "lock":
+            msg = await query.message.reply_text("🔒 Verrouillage de la session en cours...", parse_mode="Markdown")
+            try:
+                ok = await asyncio.to_thread(verrouiller_session)
+                if ok:
+                    await msg.edit_text(
+                        f"🔒 **Session verrouillée avec succès.**\n"
+                        f"_{datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}_",
+                        parse_mode="Markdown",
+                    )
+                else:
+                    await msg.edit_text("❌ Impossible de verrouiller la session.")
+            except Exception as e:
+                await msg.edit_text(f"❌ Erreur : {e}")
+        return
 
     # Actions liées à la navigation de fichiers (nav / get / zip)
     path = path_cache.get_path(extra)
@@ -799,14 +951,15 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 # ---------------------------------------------------------------------------
 async def post_init(application: Application) -> None:
     commandes = [
-        BotCommand("start", "Démarrer le bot et afficher l'accueil"),
-        BotCommand("help", "Afficher la liste des commandes"),
+        BotCommand("start", "Démarrer ORION et afficher le centre de contrôle"),
+        BotCommand("help", "Afficher toutes les commandes"),
         BotCommand("ls", "Parcourir les dossiers et fichiers"),
         BotCommand("find", "Chercher un fichier par son nom"),
         BotCommand("get", "Télécharger un fichier (< 50 Mo)"),
         BotCommand("zip", "Zipper un dossier et l'envoyer (< 50 Mo)"),
-        BotCommand("status", "Afficher l'état du PC (CPU, RAM, Disque, Uptime)"),
-        BotCommand("screenshot", "Prendre une capture d'écran du PC"),
+        BotCommand("status", "État du PC (CPU, RAM, Disque, 🔋, Uptime)"),
+        BotCommand("shot", "Capture d'écran distante immédiate"),
+        BotCommand("lock", "Verrouiller la session du PC à distance"),
     ]
     await application.bot.set_my_commands(commandes)
 
@@ -836,7 +989,8 @@ def main() -> None:
     app.add_handler(CommandHandler(["get", "getfile"], get_file))
     app.add_handler(CommandHandler("zip", zip_command))
     app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CommandHandler(["screenshot", "shot"], screenshot_command))
+    app.add_handler(CommandHandler("shot", screenshot_command))
+    app.add_handler(CommandHandler("lock", lock_command))
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, receive_file))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_error_handler(error_handler)
