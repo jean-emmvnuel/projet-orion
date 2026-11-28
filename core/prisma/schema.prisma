@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Propriétaire ORION (un compte = une personne et ses PC).
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String
+  createdAt DateTime @default(now())
+  password  String
+
+  devices      Device[]
+  pairingCodes PairingCode[]
+  commands     Command[]
+}
+
+enum DeviceOs {
+  linux
+  macos
+  windows
+}
+
+/// PC appairé. Le jeton de l'agent n'est jamais stocké en clair : seulement son empreinte SHA-256.
+model Device {
+  id         String    @id @default(uuid())
+  userId     String
+  name       String
+  os         DeviceOs
+  osVersion  String
+  hostname   String
+  tokenHash  String    @unique
+  online     Boolean   @default(false)
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commands Command[]
+  files    FileBlob[]
+
+  @@index([userId])
+}
+
+/// Code à 6 chiffres affiché dans l'app, saisi dans l'agent. Usage unique, 10 minutes.
+model PairingCode {
+  id        String    @id @default(uuid())
+  userId    String
+  codeHash  String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum CommandStatus {
+  pending
+  sent
+  running
+  done
+  failed
+  timeout
+}
+
+/// Toute action demandée par l'app à un PC (historique = écran « Activité »).
+model Command {
+  id         String        @id @default(uuid())
+  userId     String
+  deviceId   String
+  action     String
+  params     Json          @default("{}")
+  status     CommandStatus @default(pending)
+  result     Json?
+  error      String?
+  createdAt  DateTime      @default(now())
+  finishedAt DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([deviceId, createdAt])
+}
+
+/// Fichier en transit (capture, document récupéré) déposé par un agent. Supprimé après expiration.
+model FileBlob {
+  id        String   @id @default(uuid())
+  deviceId  String
+  name      String
+  mime      String
+  size      Int
+  path      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+}
