@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "ORION",
+    "slug": "orion-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "icon": "./assets/icon.png"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#120d1c",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "ORION utilise le micro pour t’écouter quand tu lui parles. Rien n’est enregistré."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-belt-light.png",
+          "backgroundColor": "#f4f2f7",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "dark": {
+            "image": "./assets/splash-belt-dark.png",
+            "backgroundColor": "#0b0a0e"
+          }
+        }
+      ],
+      "expo-secure-store",
+      "expo-sharing",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "ORION utilise Face ID pour confirmer que c’est bien toi avant de déverrouiller ton PC."
+        }
+      ]
+    ],
+    "scheme": "orion",
+    "backgroundColor": "#0e0d10",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "splash": {
+      "image": "./assets/splash-belt-dark.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b0a0e"
+    }
+  }
+}
