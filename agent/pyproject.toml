@@ -1,0 +1,46 @@
+[project]
+name = "orion-agent"
+version = "1.0.0"
+description = "Agent PC ORION : exécute sur Linux, macOS et Windows les actions demandées depuis l'app ORION, via le Core relais."
+requires-python = ">=3.12"
+dependencies = [
+  "python-socketio[asyncio_client]>=5.11",
+  "aiohttp>=3.9",
+  "httpx>=0.27",
+  "psutil>=5.9",
+  "pillow>=10.0",
+  "flet[desktop]>=1.1,<2",
+  # Écran en direct et contrôle à distance : chaque plateforme embarque ce qu'il lui faut.
+  "dbus-next>=0.2.3; sys_platform == 'linux'",  # portail XDG (Wayland / X11)
+  "mss>=9.0; sys_platform == 'win32' or sys_platform == 'darwin'",  # capture d'écran
+  "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",  # souris et clavier (CGEvent)
+  "pyobjc-framework-ApplicationServices>=10.0; sys_platform == 'darwin'",  # autorisation Accessibilité
+]
+
+[project.scripts]
+orion-agent = "orion_agent.__main__:main"
+orion-agent-gui = "orion_agent.gui:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["orion_agent*"]
+
+[tool.setuptools.package-data]
+"orion_agent.gui" = ["assets/fonts/*.ttf"]
+
+[tool.ruff]
+line-length = 120
+
+# --- Application desktop (flet build linux | macos | windows) ---
+[tool.flet]
+org = "io.orion"
+product = "ORION Agent"
+company = "ORION"
+copyright = "© 2026 Jean Emmanuel Ahossi Koua"
+
+[tool.flet.app]
+module = "main"
+exclude = [".venv", ".ruff_cache", "orion_agent.egg-info", "build", "dist", "orion-agent.service", "README.md"]
